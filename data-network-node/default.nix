@@ -3,6 +3,11 @@
 
 with nixpkgs;
 let
+  cleanSource = builtins.filterSource (name: _: let baseName = builtins.baseNameOf name; in !(
+    builtins.match "^\\.ghc\\.environment.*" baseName != null ||
+    baseName == "cabal.project.local"
+  ));
+
   haskellPackages = pkgs.haskellPackages.override {
     overrides = self: super: with pkgs.haskell.lib; {
       map-syntax = doJailbreak super.map-syntax ;
@@ -51,14 +56,14 @@ let
           sha256 = "1fs055hj46mjvmq1jfs48skclxfv431mnihjaqnmd2qvja23yvmk" ;
         }) {})) ;
       
-      hlibssh2 = overrideCabal (self.callCabal2nix "hlibssh2" ../dep/libssh2-hs/hlibssh2 {}) (drv : {
+      hlibssh2 = overrideCabal (self.callCabal2nix "hlibssh2" (cleanSource ../dep/libssh2-hs/hlibssh2) {}) (drv : {
         buildDepends = [ libssh2 ] ;
         pkgconfigDepends = [ libssh2 ] ;
         doCheck = false ;
         jailbreak = true ;
       }) ;
 
-      data-network-core = overrideCabal (self.callCabal2nix "data-network-core" ../dep/data-network-core {})(drv :{
+      data-network-core = overrideCabal (self.callCabal2nix "data-network-core" (cleanSource ../data-network-core) {})(drv :{
         doCheck = false ;
       }) ;
     } ;
