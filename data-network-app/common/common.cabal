@@ -1,0 +1,22 @@
+name: common
+version: 0.1
+cabal-version: >= 1.2
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  build-depends: base
+               , obelisk-route
+               , mtl
+               , text
+               , data-default
+               , lens
+               , file-embed
+               , byteunits
+  default-extensions:
+    TypeFamilies
+    PolyKinds
+    GADTs
+  exposed-modules:
+    Common.Api
+    Common.Route
