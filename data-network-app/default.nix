@@ -15,9 +15,9 @@ project ./. ({ pkgs, hackGet, ... }: {
   ios.bundleName = "Obelisk Minimal Example";
 
   packages = {
-    labels-json = hackGet ./dep/labels-json ;
-    hlibssh2 = hackGet ./dep/libssh2-hs/hlibssh2 ;
-    odpic-raw = hackGet ./dep/odpic-raw ;
+    labels-json = hackGet ../dep/labels-json ;
+    hlibssh2 = hackGet ../dep/libssh2-hs/hlibssh2 ;
+    odpic-raw = hackGet ../dep/odpic-raw ;
     data-network-core = hackGet ../data-network-core ;
   } ;
   overrides = self: super: {

@@ -51,16 +51,12 @@ let
           sha256 = "1fs055hj46mjvmq1jfs48skclxfv431mnihjaqnmd2qvja23yvmk" ;
         }) {})) ;
       
-      hlibssh2 = overrideCabal (self.callCabal2nix "hlibssh2" ../dep/libssh2-hs/hlibssh2 {}) (drv : {
-        buildDepends = [ libssh2 ] ;
-        pkgconfigDepends = [ libssh2 ] ;
-        doCheck = false ;
-        jailbreak = true ;
-      }) ;
+      hlibssh2 = dontCheck (doJailbreak (
+        addBuildDepends 
+          (addPkgconfigDepends (self.callCabal2nix "hlibssh2" ../dep/libssh2-hs/hlibssh2 {}) [libssh2] )
+          [libssh2]
+      )) ;
 
-      data-network-core = overrideCabal (self.callCabal2nix "data-network-core" ../dep/data-network-core {})(drv :{
-        doCheck = false ;
-      }) ;
     } ;
   } ;
 in

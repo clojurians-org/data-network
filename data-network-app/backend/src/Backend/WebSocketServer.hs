@@ -6,12 +6,14 @@
 --module Backend.WebSocketServer (serveWebSocket) where
 module Backend.WebSocketServer where
 
+
 import Common.Class
 import Common.Types
 import Common.WebSocketMessage
 import Common.ExampleData
-import Backend.Streaming
+
 import Prelude
+import DataNetwork.Core.Conduit
 import Text.Heredoc (str)
 
 import Control.Monad (forever, void)
