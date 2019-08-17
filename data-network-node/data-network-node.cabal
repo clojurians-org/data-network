@@ -23,6 +23,7 @@ executable data-network-node
   -- other-extensions:
   build-depends:       
       base
+    -- , data-network-core
 
     , distributed-process-p2p
     , bytestring
@@ -32,6 +33,7 @@ executable data-network-node
     , aeson
     , labels
     , labels-json
+    , lens
     , mtl
     , stm
     , async
@@ -39,6 +41,8 @@ executable data-network-node
     , snap-core
     , snap-server
     , snap
+    , websockets
+    , websockets-snap
 
     , resourcet
     , conduit
@@ -48,10 +52,9 @@ executable data-network-node
     , hasql
     , minio-hs
     , hlibssh2
-    , data-network-core
+
 
     , unliftio
-
 
   hs-source-dirs:      src
   default-language:    Haskell2010

@@ -1,3 +1,4 @@
+# nix-channel --add https://nixos.org/channels/nixos-19.03
 # export NIX_PATH=~/.nix-defexpr/channels
 { nixpkgs ? import <nixos-19.03> {}} :
 
