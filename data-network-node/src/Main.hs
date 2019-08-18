@@ -5,12 +5,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main where
 
 import Control.Lens hiding (lens)
 import Labels
 
+import GHC.Generics (Generic)
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Aeson as J
@@ -27,52 +29,85 @@ import Snap.Snaplet (
   , addRoutes
   )
 import Network.WebSockets.Snap (runWebSocketsSnap)
-import Data.Conduit ((.|))
 import qualified Control.Monad.Trans.Resource as R
+import Data.Conduit ((.|))
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Combinators as C
+import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.TMChan as CC
 
 import qualified UnliftIO as U
 import Data.String.Conversions (cs)
 
+import Control.Concurrent (threadDelay, forkIO)
+import System.Cron as Cron
+import qualified Data.HashMap.Lazy as M
+
 data App = App
 makeLenses ''App
 
+type FaasHooker = ( "status" := FaasStatus
+                  , "cron" := T.Text
+                  , "out" := Chan.TBMChan B.ByteString)
 type Trigger = ( "in" := Chan.TBMChan B.ByteString
-               , "out" := Chan.TBMChan B.ByteString )
+               , "out" := Chan.TBMChan B.ByteString)
+data FaasAction =  FaasActive | FaasKill
+  deriving (Generic, Show)
+instance J.ToJSON FaasAction
+instance J.FromJSON FaasAction
+data FaasStatus = Actived | Killed
+  deriving (Generic, Show)
+instance J.ToJSON FaasStatus
+instance J.FromJSON FaasStatus
+
+data WSRequestMessage = WSAdminReq FaasAction (T.Text, T.Text)
+  deriving (Generic, Show)
+instance J.ToJSON WSRequestMessage
+instance J.FromJSON WSRequestMessage
+data WSResponseMessage = WSAdminRes FaasAction (Either String (T.Text, T.Text))
+                       | WSUnhandle WSRequestMessage
+  deriving (Generic, Show)
+instance J.ToJSON WSResponseMessage
+instance J.FromJSON WSResponseMessage
+
+type AppST = ( "faas" := T.Text, "status" := FaasStatus )
 main :: IO ()
-main = do
+main = R.runResourceT $ do
   hook <- serveFaaSAsync
-  serveSnaplet defaultConfig (app hook)
-  putStrLn "finished!"
+  liftIO $ do
+    serveSnaplet defaultConfig (app hook)
+    putStrLn "finished!"
 
 mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)
 mkChan n = R.allocate (Chan.newTBMChanIO n) (U.atomically . Chan.closeTBMChan)
 
-serveFaaSAsync :: (U.MonadUnliftIO m)
+serveFaaSAsync :: (U.MonadUnliftIO m, R.MonadResource m)
   => m Trigger
-serveFaaSAsync = R.runResourceT $ do
+serveFaaSAsync = do
   (inReg, inChan) <- mkChan 1000
   (outReg, outChan) <- mkChan 1000
   U.async $ do
-    liftIO $ putStrLn "start async serveFaaSAsync ..."
     C.runConduit
        $ CC.sourceTBMChan inChan
       .| C.iterM (liftIO . print)
-      .| C.mapM faasHandle
+      .| (CL.mapMaybe J.decode .| C.mapM (fmap J.encode . faasHandle))
       .| CC.sinkTBMChan outChan
       .| C.sinkNull
-    liftIO $ putStrLn "end async serveFaaSAsync ..."      
-    R.release inReg
     R.release outReg
+    R.release inReg
   return (#in := inChan, #out := outChan)
 
-faasHandle :: (R.MonadResource m) => B.ByteString -> m B.ByteString
-faasHandle bs = do
-  liftIO $ putStrLn (cs bs)
-  return  ("faasHandle:" <> bs)
+faasHandle :: (R.MonadResource m) => WSRequestMessage -> m WSResponseMessage
+faasHandle (WSAdminReq FaasActive faas@(cronExpr, name)) = do
+  liftIO $ putStrLn "WSAdminReq handle..."
+  liftIO $ Cron.execSchedule $ Cron.addJob activeSQLScanner cronExpr
+  return . WSAdminRes FaasActive . Right $ faas
+  
+faasHandle req = return . WSUnhandle $ req
 
+activeSQLScanner = do
+  putStrLn "hello world"
+  
 app :: Trigger -> SnapletInit App App
 app trigger = makeSnaplet "data-network-node"
                           "p2p distributed fn server"
@@ -85,16 +120,22 @@ serveWS trigger pending = R.runResourceT $ do
   conn <- liftIO $ do
     putStrLn "websocket connection accepted ..."
     WS.acceptRequest pending
-  U.async $ C.runConduit
-    $ (forever $ liftIO (WS.receiveData conn) >>= C.yield)
-   .| C.iterM (liftIO . print)
-   .| C.map (id @B.ByteString)
-   .| CC.sinkTBMChan (trigger ^. lens #in)
+  U.concurrently_ 
+    (C.runConduit
+      $ (forever $ liftIO (WS.receiveData conn) >>= C.yield)
+--     .| C.iterM (liftIO . putStrLn . ("serveWS-request:" <>) . cs)
+     .| C.map (id @B.ByteString)
+     .| CC.sinkTBMChan (trigger ^. lens #in)
+      )
 
-  C.runConduit
-    $ CC.sourceTBMChan (trigger ^. lens #out)
-   .| C.mapM_ (liftIO . WS.sendTextData conn)
-   .| C.sinkNull
+    (C.runConduit
+      $ CC.sourceTBMChan (trigger ^. lens #out)
+--     .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
+     .| C.mapM_ (liftIO . WS.sendTextData conn)
+     .| C.sinkNull
+      )
   liftIO $ putStrLn "end websocket connection..."
+
   return ()
   
+-- ["FaasActive",["0/1 * * * *","larluo"]]

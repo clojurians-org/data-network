@@ -67,6 +67,7 @@ let
       data-network-core = overrideCabal (self.callCabal2nix "data-network-core" (cleanSource ../data-network-core) {})(drv :{
         doCheck = false ;
       }) ;
+      cron = dontCheck super.cron ;
     } ;
   } ;
 in

@@ -30,6 +30,7 @@ executable data-network-node
     , text
     , heredoc
     , string-conversions
+    , unordered-containers
     , aeson
     , labels
     , labels-json
@@ -37,6 +38,7 @@ executable data-network-node
     , mtl
     , stm
     , async
+    , cron
 
     , snap-core
     , snap-server
