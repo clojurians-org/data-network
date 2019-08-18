@@ -8,7 +8,7 @@
 
 module Main where
 
-import Control.Lens
+import Control.Lens hiding (lens)
 import Labels
 
 import qualified Data.ByteString.Lazy as B
@@ -34,46 +34,67 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit.TMChan as CC
 
 import qualified UnliftIO as U
+import Data.String.Conversions (cs)
 
 data App = App
 makeLenses ''App
 
+type Trigger = ( "in" := Chan.TBMChan B.ByteString
+               , "out" := Chan.TBMChan B.ByteString )
 main :: IO ()
 main = do
-  handle <- serveFaaSAsync
-  serveSnaplet defaultConfig app
-  putStrLn "Hello, Haskell!"
+  hook <- serveFaaSAsync
+  serveSnaplet defaultConfig (app hook)
+  putStrLn "finished!"
+
+mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)
+mkChan n = R.allocate (Chan.newTBMChanIO n) (U.atomically . Chan.closeTBMChan)
 
 serveFaaSAsync :: (U.MonadUnliftIO m)
-  => m ( "in" := Chan.TBMChan B.ByteString
-       , "out" := Chan.TBMChan B.ByteString)
+  => m Trigger
 serveFaaSAsync = R.runResourceT $ do
   (inReg, inChan) <- mkChan 1000
   (outReg, outChan) <- mkChan 1000
   U.async $ do
+    liftIO $ putStrLn "start async serveFaaSAsync ..."
     C.runConduit
        $ CC.sourceTBMChan inChan
+      .| C.iterM (liftIO . print)
+      .| C.mapM faasHandle
       .| CC.sinkTBMChan outChan
       .| C.sinkNull
+    liftIO $ putStrLn "end async serveFaaSAsync ..."      
     R.release inReg
     R.release outReg
   return (#in := inChan, #out := outChan)
-  where
-    mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)
-    mkChan n = R.allocate (Chan.newTBMChanIO n) (U.atomically . Chan.closeTBMChan)
-  
-app :: SnapletInit App App
-app = makeSnaplet "data-network-node" "p2p distributed fn server" Nothing $ do
-  addRoutes [("ws", runWebSocketsSnap serveWS)]
+
+faasHandle :: (R.MonadResource m) => B.ByteString -> m B.ByteString
+faasHandle bs = do
+  liftIO $ putStrLn (cs bs)
+  return  ("faasHandle:" <> bs)
+
+app :: Trigger -> SnapletInit App App
+app trigger = makeSnaplet "data-network-node"
+                          "p2p distributed fn server"
+                          Nothing $ do
+  addRoutes [("ws", runWebSocketsSnap $ serveWS trigger)]
   return App
 
-serveWS :: WS.ServerApp
-serveWS pending = do
-  putStrLn "websocket connection accepted ..."
-  conn <- WS.acceptRequest pending
-  C.runConduit
+serveWS :: Trigger -> WS.ServerApp
+serveWS trigger pending = R.runResourceT $ do
+  conn <- liftIO $ do
+    putStrLn "websocket connection accepted ..."
+    WS.acceptRequest pending
+  U.async $ C.runConduit
     $ (forever $ liftIO (WS.receiveData conn) >>= C.yield)
-    .| C.map (id @B.ByteString)
-    .| C.mapM_ (WS.sendTextData conn)
-    .| C.sinkNull
+   .| C.iterM (liftIO . print)
+   .| C.map (id @B.ByteString)
+   .| CC.sinkTBMChan (trigger ^. lens #in)
+
+  C.runConduit
+    $ CC.sourceTBMChan (trigger ^. lens #out)
+   .| C.mapM_ (liftIO . WS.sendTextData conn)
+   .| C.sinkNull
+  liftIO $ putStrLn "end websocket connection..."
+  return ()
   
