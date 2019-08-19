@@ -23,7 +23,7 @@ executable data-network-node
   -- other-extensions:
   build-depends:       
       base
-    -- , data-network-core
+    , data-network-core
 
     , distributed-process-p2p
     , bytestring

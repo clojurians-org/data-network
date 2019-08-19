@@ -22,7 +22,9 @@ library
       DataNetwork.Core.Types
     , DataNetwork.Core.Conduit
   other-modules:
-      DataNetwork.Core.Conduit.Oracle
+      DataNetwork.Core.Types.RPC
+    , DataNetwork.Core.Conduit.Oracle
+
   -- other-extensions:
   build-depends:       
       base
@@ -36,10 +38,6 @@ library
     , mtl
     , stm
     , async
-
-    , snap-core
-    , snap-server
-    , snap
 
     , resourcet
     , conduit

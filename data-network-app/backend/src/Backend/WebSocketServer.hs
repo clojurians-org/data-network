@@ -27,12 +27,15 @@ import Data.Functor ((<&>))
 import Control.Exception (bracket, finally)
 import GHC.Int (Int64)
 import Data.String (IsString(..))
+import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.String.Conversions (cs)
 import qualified Data.Aeson as J
 import qualified Network.WebSockets as WS
-import Data.Conduit (runConduit, yield, (.|))
+--import Data.Conduit (runConduit, yield, (.|))
+import Data.Conduit ((.|))
+import qualified Data.Conduit as C
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit.List as CL
 import qualified Language.Haskell.Interpreter as I
@@ -52,6 +55,7 @@ import Control.Monad.Trans.Except (runExceptT, ExceptT(..), except)
 import Data.Bits (Bits(..))
 import Foreign.C.Types (CULong)
 
+import Network.Socket (withSocketsDo)
 import Network.SSH.Client.LibSSH2
   ( Sftp, Session, sessionInit, sessionClose
   , checkHost
@@ -70,16 +74,22 @@ serveWebSocket appST = runWebSocketsSnap (wsConduitApp appST)
 wsConduitApp :: MVar AppST -> WS.ServerApp
 wsConduitApp appST pending= do
   putStrLn "websocket connection accepted ..."
-  conn <- WS.acceptRequest pending
+  uiConn <- WS.acceptRequest pending
 
-  runConduit
-    $ (forever $ liftIO (WS.receiveData conn) >>= yield . J.decode)
-   .| CL.mapMaybe (id @(Maybe WSRequestMessage))
---   .| C.iterM print
-   .| C.mapM (wsHandle appST)
---   .| C.iterM print         
-   .| C.mapM_ (WS.sendTextData conn . J.encode)
-   .| C.sinkNull
+--  withSocketsDo $ WS.runClient "localhost" 8000 "/ws/" $ do
+--    putStrLn "connected"
+  withSocketsDo $ WS.runClient "localhost" 8000 "/ws/" $ \rpcConn -> do
+    let uiSource = forever $ liftIO (WS.receiveData uiConn) >>= C.yield
+--        rpcSource = forever $ liftIO (WS.receiveData rpcConn) >>= C.yield
+            
+    putStrLn "connected"
+    C.runConduit
+      $ uiSource
+--     .| C.iterM print      
+     .| CL.mapMaybe J.decode .| C.mapM (wsHandle appST)
+--     .| C.iterM print         
+     .| C.mapM_ (WS.sendTextData uiConn . J.encode)
+     .| C.sinkNull
 
 wsHandle :: MVar AppST -> WSRequestMessage -> IO WSResponseMessage
 wsHandle appST AppInitREQ = do
