@@ -63,6 +63,7 @@ deriving instance Show (DataNetworkRoute a)
 data EventLakeRoute :: * -> * where
   EventLakeRoute_CronTimer :: EventLakeRoute ()
   EventLakeRoute_FileWatcher :: EventLakeRoute ()
+  EventLakeRoute_SQLScanner :: EventLakeRoute ()
 deriving instance Show (EventLakeRoute a)
 
 data DataSandboxRoute :: * -> * where
@@ -124,6 +125,7 @@ backendRouteEncoder = handleEncoder (const (InL BackendRoute_Missing :/ ())) $
         pathComponentEncoder $ \case
           EventLakeRoute_CronTimer -> PathSegment "cronTimer" $ unitEncoder mempty
           EventLakeRoute_FileWatcher -> PathSegment "fileWatcher" $ unitEncoder mempty
+          EventLakeRoute_SQLScanner -> PathSegment "sqlScanner" $ unitEncoder mempty
       FrontendRoute_DataSandbox -> PathSegment "dataSandbox" $
         pathComponentEncoder $ \case
           DataSandboxRoute_StateContainer -> PathSegment "stateContainer" $

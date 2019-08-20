@@ -33,6 +33,7 @@ instance J.FromJSON RPCRequest
 data RPCResponse = FaasActiveRes (Either String (T.Text, CronExpr))
                  | FaasKillRes (Either String T.Text)
                  | FaasReadRes (Either String (Maybe FaasInfo))
+                 | FaasNotifyRes' (Either String (T.Text, J.Value))
                  | FaasUnhandle RPCRequest
                  | FaasDebug T.Text
   deriving (Generic, Show)

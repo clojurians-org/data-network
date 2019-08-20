@@ -81,10 +81,10 @@ serveWebSocket appST = runWebSocketsSnap (wsConduitApp appST)
 
 wsConduitApp :: MVar AppST -> WS.ServerApp
 wsConduitApp appST pending= do
-  putStrLn "ui-ws connection accepted ..."
+  putStrLn "ui-ws connection accepting ..."
   uiConn <-  WS.acceptRequest pending
 
-  withSocketsDo $ WS.runClient "localhost" 8000 "/ws/" $ \rpcConn -> R.runResourceT $ do
+  withSocketsDo $ WS.runClient "127.0.0.1" 1111 "/ws/" (\rpcConn -> R.runResourceT $ do
     (outReg, outChan) <- mkChan 1000
     liftIO $ putStrLn "node-ws connected  ..."    
     let uiSource = forever $ liftIO (WS.receiveData uiConn) >>= C.yield
@@ -99,15 +99,17 @@ wsConduitApp appST pending= do
     U.concurrently_
       (C.runConduit
         $ uiSource
---       .| C.iterM (liftIO . print)
+       .| C.iterM (liftIO . putStrLn . ("receive mesage:" <>) . cs) 
        .| (C.getZipConduit
              $ C.ZipConduit ( CL.mapMaybe J.decode
+--                           .| C.iterM (liftIO . putStrLn . ("self handle:" <>) . cs . show)
                            .| C.mapM (wsHandle appST)
                            .| C.map (J.encode @WSResponseMessage)
---                           .| C.iterM (liftIO . print)
+--                           .| C.iterM (liftIO . putStrLn . ("WSResponseMessage:" <>) . cs)
                            .| chanSink
                             )
             *> C.ZipConduit ( CL.mapMaybe J.decode
+                           .| C.iterM (liftIO . putStrLn . ("rpc handle:" <>) . cs . show)
                            .| C.map (J.encode @Node.RPCRequest)
                            .| rpcSink
                             )
@@ -115,9 +117,11 @@ wsConduitApp appST pending= do
         )
       
       (C.runConduit $ joinSource
-                   .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
-                   .| uiSink)
-     
+--                   .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
+                   .| uiSink))
+    `U.catch` \(U.SomeException e) -> putStrLn (show e)
+
+  putStrLn "ui-ws connection finished ..."        
   where
     mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)
     mkChan n = R.allocate (Chan.newTBMChanIO n) (U.atomically . Chan.closeTBMChan)
@@ -125,7 +129,7 @@ wsConduitApp appST pending= do
 wsHandle :: (MonadIO m, R.MonadUnliftIO m) => MVar AppST -> WSRequestMessage -> m WSResponseMessage
 
 wsHandle appST AppInitREQ = do
-  U.readMVar appST >>= liftIO . putStrLn . ("INIT REQ" ++ ) . show
+  -- U.readMVar appST >>= liftIO . putStrLn . ("INIT REQ" ++ ) . show
   return . AppInitRES =<< U.readMVar appST
 
 

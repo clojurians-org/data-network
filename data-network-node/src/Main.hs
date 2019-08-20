@@ -30,7 +30,7 @@ import Control.Monad.Trans (MonadIO(liftIO), MonadTrans(lift))
 import qualified Control.Concurrent.STM.TBMChan as Chan
 import qualified Network.WebSockets as WS
 import Snap.Core (MonadSnap(..))
-import Snap.Http.Server (defaultConfig)
+import Snap.Http.Server (defaultConfig, setPort)
 import Snap.Snaplet (
     SnapletInit(..)
   , serveSnaplet, makeSnaplet
@@ -64,7 +64,7 @@ main = R.runResourceT $ do
   appST <- U.newMVar M.empty
   hook <- (serveFaaSAsync appST)
   liftIO $ do
-    serveSnaplet defaultConfig (app hook)
+    serveSnaplet (defaultConfig & setPort 1111) (app hook)
     putStrLn "finished!"
 
 mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)

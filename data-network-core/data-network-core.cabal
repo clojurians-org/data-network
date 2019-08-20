@@ -32,6 +32,8 @@ library
     , text
     , heredoc
     , string-conversions
+    , text-show
+    , text-show-instances
     , aeson
     , labels
     , labels-json
@@ -47,7 +49,6 @@ library
     , hasql
     , minio-hs
     , hlibssh2
-
     , unliftio
     
   hs-source-dirs:      src

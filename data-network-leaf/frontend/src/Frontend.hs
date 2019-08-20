@@ -31,7 +31,9 @@ import Frontend.Page.DataNetwork.EffectEngine (dataNetwork_effectEngine_handle, 
 import Frontend.Page.DataNetwork.LogicFragement (dataNetwork_logicFragement_handle, dataNetwork_logicFragement)
 import Frontend.Page.DataNetwork.DataConduit (dataNetwork_dataConduit_handle, dataNetwork_dataConduit)
 import Frontend.Page.DataNetwork.DataCircuit (dataNetwork_dataCircuit)
-import Frontend.Page.EventLake.CronTimer (eventLake_cronTimer_handle, eventLake_cronTimer)
+import Frontend.Page.EventLake.CronTimer (eventLake_cronTimer)
+import Frontend.Page.EventLake.SQLScanner (eventLake_sqlScanner)
+
 import Frontend.Page.DataSandbox (dataService_sftp, dataSource_sqlCursor)
 
 import Prelude
@@ -96,14 +98,16 @@ nav = do
     divClass "menu" $ do
       divClass "item" $ routeLink (FrontendRoute_EventLake :/ EventLakeRoute_CronTimer :/ ()) $ text "Cron定时器"      
       divClass "item" $ routeLink (FrontendRoute_EventLake :/ EventLakeRoute_FileWatcher :/ ()) $ text "文件监控器"
-      divClass "item" $ text "SQL扫描器"
+      divClass "item" $ routeLink (FrontendRoute_EventLake :/ EventLakeRoute_SQLScanner :/ ()) $ text "SQL扫描器"
 
+{--
   divClass "item" $ do
     elClass "h4" "ui header" $ text "状态容器"
     divClass "menu" $ do
       divClass "item" $ routeLink (FrontendRoute_DataSandbox :/ DataSandboxRoute_StateContainer :/ StateContainerRoute_PostgreSQL :/ ()) $ text "PostgreSQL"
       divClass "item" $ routeLink (FrontendRoute_DataSandbox :/ DataSandboxRoute_StateContainer :/ StateContainerRoute_RocksDB :/ ()) $ text "RocksDB"
       divClass "item" $ routeLink (FrontendRoute_DataSandbox :/ DataSandboxRoute_StateContainer :/ StateContainerRoute_SQLLite :/ ()) $ text "SQLLite"
+--}
 
   divClass "item" $ do
     elClass "h4" "ui header" $ text "数据源"
@@ -170,7 +174,7 @@ htmlBody =  do
     divClass "ui message icon" $ do
       elClass "i" "notched circle loading icon" $ blank
       elClass "h1" "ui header" $
-        routeLink (FrontendRoute_Main :/ ()) $ text "实时数据中台"
+        routeLink (FrontendRoute_Main :/ ()) $ text "数据网络"
     
     divClass "ui grid" $ do
       divClass "ui two wide column vertical menu visible compact" $ nav
@@ -224,6 +228,7 @@ page = do
       FrontendRoute_EventLake -> subRoute_ $ \case
         EventLakeRoute_CronTimer -> void $ eventLake_cronTimer undefined
         EventLakeRoute_FileWatcher -> text "my EventLakeRoute_FileWatcher"
+        EventLakeRoute_SQLScanner -> text "my EventLakeRoute_SQLScanner"
       FrontendRoute_DataSandbox -> subRoute_ $ \case
         DataSandboxRoute_StateContainer -> subRoute_ $ \case
           StateContainerRoute_PostgreSQL -> text "my StateContainerRoute_PostgreSQL"
