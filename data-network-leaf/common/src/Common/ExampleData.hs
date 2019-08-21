@@ -1,8 +1,10 @@
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedLabels, DataKinds, TypeOperators #-}
 
 module Common.ExampleData where
 
+import qualified DataNetwork.Core.Types as DN
 import Common.Types
 import Common.Class
 import Prelude
@@ -17,6 +19,7 @@ import Data.String.Conversions (cs)
 import Data.Function ((&))
 import Control.Applicative (liftA2)
 import Labels ((:=)(..))
+import qualified Labels as L
 import Data.Maybe (fromJust)
 import qualified Data.HashMap.Lazy as M
 
@@ -37,9 +40,26 @@ exampleFaasCenter =
                         (M.fromList $ fmap (liftA2 (,) (fromJust . getDataServiceId) id) exampleDataServices) )
   , #eventLake := ( #cronTimers := M.empty
                   , #fileWatchers := M.empty
-                  , #sqlScanners := M.empty )
+                  , #sqlScanners :=
+                       (M.fromList $ fmap (liftA2 (,) (fromJust . L.get #xid . label) id) exampleSQLScanners)
+                    )
     )
-    
+
+exampleSQLScanners :: [DN.SQLScanner]
+exampleSQLScanners =
+  [ DN.SQLScanner
+      ( #name := "dw-schedule"
+      , #desc := "数仓调度系统扫描"
+      , #cron := def
+      , #sql_connect := SQLConnect
+          ( #type := DN.Oracle
+          , #credential := Credential "10.132.37.241" 1521 "KB" "KB123456"
+          , #database_name := DN.DatabaseName "EDMP")
+      , #sql := "SELECT * FROM KB.TB_INTERFACE_LOG"
+      , #increment_field := ""
+      , #xid := Just 1 )
+    ]
+
 exampleDataSources :: [DataSource]
 exampleDataSources =
   [ DSO_SQLCursor (def { dsoSQLCursorName = "sqlCursor_pg_tb_interface"

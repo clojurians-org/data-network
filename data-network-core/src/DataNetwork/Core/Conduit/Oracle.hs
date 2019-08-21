@@ -32,8 +32,6 @@ import Control.Monad (when, void)
 
 import Control.Concurrent.STM.TBMChan (TBMChan, newTBMChanIO, closeTBMChan, writeTBMChan, readTBMChan)
 import Data.Conduit.TMChan (sourceTBMChan)
-import Control.Concurrent.Async (async)
-import Control.Monad.STM (atomically)
 
 import qualified UnliftIO as U
 
@@ -59,7 +57,7 @@ oracleChan (Credential hostName hostPort username password) database sql = do
                  (cs (hostName <> ":" <> tshow hostPort <> "/" <> database))
       defCursorSize = 2000
       defBatchSize = 20000
-  (reg, chan) <- allocate (newTBMChanIO defBatchSize) (atomically . closeTBMChan)
+  (reg, chan) <- allocate (newTBMChanIO defBatchSize) (U.atomically . closeTBMChan)
   U.async $ bracketR Oracle.createContext Oracle.destroyContext $ \ctx ->
     bracketR (Oracle.createConnection ctx config return)
              (\c -> Oracle.closeConnection Oracle.ModeConnCloseDefault c
@@ -79,7 +77,7 @@ oracleChan (Credential hostName hostPort username password) database sql = do
         row <- mapM (\i -> Oracle.DataField <$> Oracle.getQueryInfo stmt i
                                             <*> Oracle.getQueryValue stmt i)
                   [1..cn]
-        atomically $ writeTBMChan chan row
+        U.atomically $ writeTBMChan chan row
         sinkRows chan stmt cn cursorSize
 
 textOracle :: (MonadIO m) => Oracle.DataField -> m T.Text

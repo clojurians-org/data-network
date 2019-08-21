@@ -228,7 +228,7 @@ page = do
       FrontendRoute_EventLake -> subRoute_ $ \case
         EventLakeRoute_CronTimer -> void $ eventLake_cronTimer undefined
         EventLakeRoute_FileWatcher -> text "my EventLakeRoute_FileWatcher"
-        EventLakeRoute_SQLScanner -> text "my EventLakeRoute_SQLScanner"
+        EventLakeRoute_SQLScanner -> eventLake_sqlScanner
       FrontendRoute_DataSandbox -> subRoute_ $ \case
         DataSandboxRoute_StateContainer -> subRoute_ $ \case
           StateContainerRoute_PostgreSQL -> text "my StateContainerRoute_PostgreSQL"

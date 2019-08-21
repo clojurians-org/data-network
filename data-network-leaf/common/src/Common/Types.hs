@@ -36,7 +36,7 @@ type FaaSCenter  =
                      , "dataServices" := M.HashMap Int64 X.DataService )
   , "eventLake" := ( "cronTimers" := M.HashMap Int64 X.ELCronTimer
                    , "fileWatchers" := M.HashMap Int64 X.ELFileWatcher
-                   , "sqlScanners" := M.HashMap Int64 X.ELSQLScanner )
+                   , "sqlScanners" := M.HashMap Int64 X.SQLScanner )
     )
 type AppST = FaaSCenter
 

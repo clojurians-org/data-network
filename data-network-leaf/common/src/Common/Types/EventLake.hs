@@ -4,7 +4,7 @@
 
 module Common.Types.EventLake where
 
-import Common.Types.Base
+import qualified DataNetwork.Core.Types as DN
 import Prelude
 
 import GHC.Int (Int64)

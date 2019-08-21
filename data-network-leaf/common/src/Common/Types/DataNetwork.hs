@@ -4,7 +4,7 @@
 
 module Common.Types.DataNetwork where
 
-import Common.Types.Base
+import qualified DataNetwork.Core.Types as DN
 import Common.Types.DataSandbox
 import Prelude
 

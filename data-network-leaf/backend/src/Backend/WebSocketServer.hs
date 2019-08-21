@@ -38,7 +38,6 @@ import qualified Network.WebSockets as WS
 import Data.Conduit ((.|))
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Combinators as C
-import qualified Data.Conduit.List as CL
 import Data.Conduit.TMChan ((>=<))
 import qualified Data.Conduit.TMChan as CC
 import qualified Control.Concurrent.STM.TBMChan as Chan
@@ -95,30 +94,36 @@ wsConduitApp appST pending= do
         rpcSource = forever $ liftIO (WS.receiveData rpcConn) >>= C.yield
         uiSink = C.awaitForever $ liftIO . WS.sendTextData uiConn
 
-    joinSource <- chanSource >=<  rpcSource
+    joinSource <- chanSource
+              >=< ( rpcSource
+--                 .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
+                 .| C.concatMap J.decode
+                 .| C.map (J.encode . NodeRPCRes)
+                 )
+
     U.concurrently_
       (C.runConduit
         $ uiSource
-       .| C.iterM (liftIO . putStrLn . ("receive mesage:" <>) . cs) 
+       .| C.iterM (liftIO . putStrLn . ("receive mesage:" <>) . cs)
+       .| C.concatMap J.decode
        .| (C.getZipConduit
-             $ C.ZipConduit ( CL.mapMaybe J.decode
---                           .| C.iterM (liftIO . putStrLn . ("self handle:" <>) . cs . show)
+             $ C.ZipConduit ( C.concatMap fromLeafRPCReq
+--                           .| C.iterM (liftIO . putStrLn . ("leaf-req:" <>) . cs . show)
                            .| C.mapM (wsHandle appST)
                            .| C.map (J.encode @WSResponseMessage)
---                           .| C.iterM (liftIO . putStrLn . ("WSResponseMessage:" <>) . cs)
+--                           .| C.iterM (liftIO . putStrLn . ("leaf-res:" <>) . cs)
                            .| chanSink
                             )
-            *> C.ZipConduit ( CL.mapMaybe J.decode
-                           .| C.iterM (liftIO . putStrLn . ("rpc handle:" <>) . cs . show)
+            *> C.ZipConduit ( C.concatMap fromNodeRPCReq
+                           .| C.iterM (liftIO . putStrLn . ("rpc-proxy:" <>) . cs . show)
                            .| C.map (J.encode @Node.RPCRequest)
                            .| rpcSink
                             )
              )
         )
-      
-      (C.runConduit $ joinSource
---                   .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
-                   .| uiSink))
+
+
+      (C.runConduit $ joinSource .| uiSink))
     `U.catch` \(U.SomeException e) -> putStrLn (show e)
 
   putStrLn "ui-ws connection finished ..."        

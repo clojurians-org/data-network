@@ -9,6 +9,7 @@ import Common.WebSocketMessage
 import Prelude
 import Reflex.Dom.Core
 import qualified Data.Text as T
+import qualified TextShow as T
 
 import Data.Proxy (Proxy(..))
 import Control.Monad (void, forM, forM_)
@@ -104,6 +105,31 @@ theadList xs = do
     elClass "th" "" $ checkbox False def
     trHeadList xs
   return ()
+
+loginLineB :: forall t m. (DomBuilder t m, PostBuild t m)
+  => Dynamic t Credential -> m (Dynamic t Credential, Event t Credential)
+loginLineB credentialD = do
+  divClass "ui form compact" $ do
+    divClass "fields" $ do
+      hostD' <- dynInputFieldDB "主机" $ do
+        hostName <- credentialD <&> hostName
+        hostPort <- credentialD <&> hostPort
+        return $ hostName <> ":" <> (T.showt hostPort)
+      usernameD' <- dynInputFieldDB "用户名" (credentialD <&> username)
+      passwordD' <- dynInputFieldDB "密码" (credentialD <&> password)
+      divClass "field" $ do
+        el "label" $ elClass "i" "angle double down icon" blank
+        let vD = credential <$> hostD' <*> usernameD' <*> passwordD'
+        submitE <- submitEB "连接"
+        return (vD, tagPromptlyDyn vD submitE)
+
+loginLineDB :: forall t m. (DomBuilder t m, PostBuild t m)
+  => Dynamic t Credential -> m (Dynamic t Credential)
+loginLineDB = fmap fst . loginLineB
+
+loginLineEB :: forall t m. (DomBuilder t m, PostBuild t m)
+  => Dynamic t Credential -> m (Event t Credential)
+loginLineEB = fmap snd . loginLineB
 
 loginFormB :: forall t m. (DomBuilder t m, PostBuild t m)
   => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Dynamic t Credential, Event t Credential)

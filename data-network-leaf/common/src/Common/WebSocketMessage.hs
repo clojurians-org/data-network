@@ -5,6 +5,7 @@
 
 module Common.WebSocketMessage where
 
+import qualified DataNetwork.Core.Types as Node
 import Prelude
 
 import Common.Types
@@ -68,6 +69,8 @@ data WSRequestMessage = AppInitREQ
                     -- SFTP
                     | DSEFSSFtpCREQ DSEFSSFtp
                     | DSEFSSFtpDirectoryRREQ Credential (Maybe T.Text)
+                    -- Node
+                    | NodeRPCReq Node.RPCRequest
   deriving (Generic, Show)
 instance J.ToJSON WSRequestMessage
 instance J.FromJSON WSRequestMessage
@@ -99,15 +102,41 @@ data WSResponseMessage = NeverRES
                     -- SFTP
                      | DSEFSSFtpDirectoryRRES (Either String [SFtpEntry])
                      
+                    -- Node
+                     | NodeRPCRes Node.RPCResponse
                      -- Unkown
                      | WSResponseUnknown WSRequestMessage
   deriving (Generic, Show)
 instance J.ToJSON WSResponseMessage
 instance J.FromJSON WSResponseMessage
 
+
+----------------
+-- Extract
+----------------
+fromLeafRPCReq :: WSRequestMessage -> Maybe WSRequestMessage
+fromLeafRPCReq (NodeRPCReq _) = Nothing
+fromLeafRPCReq r = Just r
+
+fromNodeRPCReq :: WSRequestMessage -> Maybe Node.RPCRequest
+fromNodeRPCReq (NodeRPCReq r) = Just r
+fromNodeRPCReq _ = Nothing
+
+{--
+fromLeafRPCRes :: WSResponseMessage -> Maybe WSResponseMessage
+fromLeafRPCRes (NodeRPCRes r) = Nothing
+fromLeafRPCRes r = Just r
+
+fromNodeRPCRes :: WSResponseMessage -> Maybe Node.RPCResponse
+fromNodeRPCRes (NodeRPCRes r) = Just r
+fromNodeRPCRes _ = Nothing
+--}
+
+
 ----------------
 -- Request
 ----------------
+              
 isELCronTimerDREQ :: WSRequestMessage -> Bool
 isELCronTimerDREQ (ELCronTimerDREQ  _) = True
 isELCronTimerDREQ _ = False
