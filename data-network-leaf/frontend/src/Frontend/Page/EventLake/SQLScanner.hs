@@ -24,11 +24,11 @@ import Data.Functor ((<&>))
 import Control.Monad.Fix (MonadFix)
 
 trSQLScanner :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t SQLScanner -> m ()
+  => Dynamic t DN.SQLScanner -> m ()
 trSQLScanner scannerD = do
-  tdDynInput (scannerD <&> L.get #name . label )
-  tdDynInput (scannerD <&> L.get #desc . label )
-  tdDynInput (scannerD <&> tshow . L.get #cron . label )
+  tdDynInput (scannerD <&> L.get #name . DN.label )
+  tdDynInput (scannerD <&> L.get #desc . DN.label )
+  tdDynInput (scannerD <&> tshow . L.get #cron . DN.label )
   tdDynInput (constDyn "")
   return ()
   
@@ -52,12 +52,13 @@ eventLake_sqlScanner = do
       e1 <- fmap (switchDyn . fmap leftmost) . simpleList scannersD $ \v -> do
         trE <- trEB $ do
           selectE >> trSQLScanner v
+          text "active"          
           divClass "ui icon buttons" $ do
             activeE <- buttonClass "ui button" $ elClass "i" "play blue icon" blank
             killE <- buttonClass "ui button" $ elClass "i" "pause blue icon" blank
             tellEventSingle $ flip tagPromptlyDyn activeE $ do
-              name <- v <&> L.get #name . label
-              cron <- v <&> L.get #cron . label
+              name <- v <&> L.get #name . DN.label
+              cron <- v <&> L.get #cron . DN.label
               return . NodeRPCReq . DN.FaasActiveReq $ (name, cron)
         return (tagPromptlyDyn v trE)   
       return $ leftmost [e0, e1]
@@ -69,7 +70,7 @@ eventLake_sqlScanner = do
         divClass "field" $ do
           el "label" $ text "SQL脚本"
           dynEditor (constDyn "aaa")
-        let credentialD = scannerD <&> L.get #credential. label . L.get #sql_connect . label
+        let credentialD = scannerD <&> L.get #credential . DN.label . L.get #sql_connect . DN.label
       
         (submitD, submitE) <- loginLineB credentialD
         blank

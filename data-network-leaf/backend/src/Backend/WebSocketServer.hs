@@ -6,7 +6,7 @@
 --module Backend.WebSocketServer (serveWebSocket) where
 module Backend.WebSocketServer where
 
-import qualified DataNetwork.Core.Types as Node
+import qualified DataNetwork.Core.Types as DN
 import DataNetwork.Core.Conduit
 
 import Common.Class
@@ -116,7 +116,7 @@ wsConduitApp appST pending= do
                             )
             *> C.ZipConduit ( C.concatMap fromNodeRPCReq
                            .| C.iterM (liftIO . putStrLn . ("rpc-proxy:" <>) . cs . show)
-                           .| C.map (J.encode @Node.RPCRequest)
+                           .| C.map (J.encode @DN.RPCRequest)
                            .| rpcSink
                             )
              )
@@ -168,7 +168,7 @@ wsHandle appST (DSOSQLCursorTableRREQ cr "Oracle" database (schema, table) ) = d
 
 
 wsHandle appST (DSEFSSFtpDirectoryRREQ
-                  (Credential hostName hostPort username password)
+                  (DN.Credential hostName hostPort username password)
                   path) = liftIO $ do
   bracket (sessionInit (cs hostName) hostPort) sessionClose $ \s -> do
     liftIO $ usernamePasswordAuth s (cs username) (cs password)

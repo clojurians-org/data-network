@@ -5,7 +5,7 @@
 
 module Common.WebSocketMessage where
 
-import qualified DataNetwork.Core.Types as Node
+import qualified DataNetwork.Core.Types as DN
 import Prelude
 
 import Common.Types
@@ -64,13 +64,13 @@ data WSRequestMessage = AppInitREQ
                     | DSOSQLCursorRREQ Int64
                     | DSOSQLCursorUREQ DSOSQLCursor
                     | DSOSQLCursorDREQ Int64
-                    | DSOSQLCursorDatabaseRREQ Credential T.Text T.Text
-                    | DSOSQLCursorTableRREQ Credential T.Text T.Text (T.Text, T.Text)
+                    | DSOSQLCursorDatabaseRREQ DN.Credential T.Text T.Text
+                    | DSOSQLCursorTableRREQ DN.Credential T.Text T.Text (T.Text, T.Text)
                     -- SFTP
                     | DSEFSSFtpCREQ DSEFSSFtp
-                    | DSEFSSFtpDirectoryRREQ Credential (Maybe T.Text)
+                    | DSEFSSFtpDirectoryRREQ DN.Credential (Maybe T.Text)
                     -- Node
-                    | NodeRPCReq Node.RPCRequest
+                    | NodeRPCReq DN.RPCRequest
   deriving (Generic, Show)
 instance J.ToJSON WSRequestMessage
 instance J.FromJSON WSRequestMessage
@@ -103,7 +103,7 @@ data WSResponseMessage = NeverRES
                      | DSEFSSFtpDirectoryRRES (Either String [SFtpEntry])
                      
                     -- Node
-                     | NodeRPCRes Node.RPCResponse
+                     | NodeRPCRes DN.RPCResponse
                      -- Unkown
                      | WSResponseUnknown WSRequestMessage
   deriving (Generic, Show)
@@ -118,7 +118,7 @@ fromLeafRPCReq :: WSRequestMessage -> Maybe WSRequestMessage
 fromLeafRPCReq (NodeRPCReq _) = Nothing
 fromLeafRPCReq r = Just r
 
-fromNodeRPCReq :: WSRequestMessage -> Maybe Node.RPCRequest
+fromNodeRPCReq :: WSRequestMessage -> Maybe DN.RPCRequest
 fromNodeRPCReq (NodeRPCReq r) = Just r
 fromNodeRPCReq _ = Nothing
 

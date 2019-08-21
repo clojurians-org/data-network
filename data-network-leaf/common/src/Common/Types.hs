@@ -7,7 +7,7 @@
 module Common.Types
   ( module X, FaaSCenter, AppST, defAppST) where
 
-import DataNetwork.Core.Types as X
+import DataNetwork.Core.Types as DN
 import Common.Types.DataNetwork as X
 import Common.Types.DataSandbox as X
 import Common.Types.EventLake as X
@@ -36,7 +36,8 @@ type FaaSCenter  =
                      , "dataServices" := M.HashMap Int64 X.DataService )
   , "eventLake" := ( "cronTimers" := M.HashMap Int64 X.ELCronTimer
                    , "fileWatchers" := M.HashMap Int64 X.ELFileWatcher
-                   , "sqlScanners" := M.HashMap Int64 X.SQLScanner )
+                   , "sqlScanners" := M.HashMap Int64 DN.SQLScanner )
+  , "faas" := M.HashMap T.Text DN.FaasStatus
     )
 type AppST = FaaSCenter
 
@@ -50,5 +51,6 @@ defAppST = ( #dataNetwork := ( #eventPulses := M.empty
                           , #dataServices := M.empty )
         , #eventLake := ( #cronTimers := M.empty
                         , #fileWatchers := M.empty
-                        , #sqlScanners := M.empty ) )
+                        , #sqlScanners := M.empty )
+        , #faas := M.empty )
 

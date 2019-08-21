@@ -4,6 +4,7 @@
 
 module Frontend.Widget where
 
+import qualified DataNetwork.Core.Types as DN
 import Common.Types
 import Common.WebSocketMessage
 import Prelude
@@ -107,32 +108,32 @@ theadList xs = do
   return ()
 
 loginLineB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t Credential -> m (Dynamic t Credential, Event t Credential)
+  => Dynamic t DN.Credential -> m (Dynamic t DN.Credential, Event t DN.Credential)
 loginLineB credentialD = do
   divClass "ui form compact" $ do
     divClass "fields" $ do
       hostD' <- dynInputFieldDB "主机" $ do
-        hostName <- credentialD <&> hostName
-        hostPort <- credentialD <&> hostPort
+        hostName <- credentialD <&> DN.hostName
+        hostPort <- credentialD <&> DN.hostPort
         return $ hostName <> ":" <> (T.showt hostPort)
-      usernameD' <- dynInputFieldDB "用户名" (credentialD <&> username)
-      passwordD' <- dynInputFieldDB "密码" (credentialD <&> password)
+      usernameD' <- dynInputFieldDB "用户名" (credentialD <&> DN.username)
+      passwordD' <- dynInputFieldDB "密码" (credentialD <&> DN.password)
       divClass "field" $ do
         el "label" $ elClass "i" "angle double down icon" blank
-        let vD = credential <$> hostD' <*> usernameD' <*> passwordD'
+        let vD = DN.credential <$> hostD' <*> usernameD' <*> passwordD'
         submitE <- submitEB "连接"
         return (vD, tagPromptlyDyn vD submitE)
 
 loginLineDB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t Credential -> m (Dynamic t Credential)
+  => Dynamic t DN.Credential -> m (Dynamic t DN.Credential)
 loginLineDB = fmap fst . loginLineB
 
 loginLineEB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t Credential -> m (Event t Credential)
+  => Dynamic t DN.Credential -> m (Event t DN.Credential)
 loginLineEB = fmap snd . loginLineB
 
 loginFormB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Dynamic t Credential, Event t Credential)
+  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Dynamic t DN.Credential, Event t DN.Credential)
 loginFormB hostD usernameD passwordD = do
   divClass "ui form compact" $ do
     divClass "fields" $ do
@@ -141,17 +142,17 @@ loginFormB hostD usernameD passwordD = do
       passwordD' <- dynInputFieldDB "密码" passwordD
       divClass "field" $ do
         el "label" $ elClass "i" "angle double down icon" blank
-        let vD = credential <$> hostD' <*> usernameD' <*> passwordD'
+        let vD = DN.credential <$> hostD' <*> usernameD' <*> passwordD'
         submitE <- submitEB "连接"
         return (vD, tagPromptlyDyn vD submitE)
   
 
 loginFormDB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Dynamic t Credential)
+  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Dynamic t DN.Credential)
 loginFormDB = ((.) . (.) . (.)) (fmap fst) loginFormB
   
 loginFormEB :: forall t m. (DomBuilder t m, PostBuild t m)
-  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Event t Credential)
+  => Dynamic t T.Text -> Dynamic t T.Text -> Dynamic t T.Text -> m (Event t DN.Credential)
 loginFormEB = ((.) . (.) . (.)) (fmap snd)  loginFormB
   
 {--

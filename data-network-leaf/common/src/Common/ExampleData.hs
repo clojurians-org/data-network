@@ -41,8 +41,9 @@ exampleFaasCenter =
   , #eventLake := ( #cronTimers := M.empty
                   , #fileWatchers := M.empty
                   , #sqlScanners :=
-                       (M.fromList $ fmap (liftA2 (,) (fromJust . L.get #xid . label) id) exampleSQLScanners)
+                       (M.fromList $ fmap (liftA2 (,) (fromJust . L.get #xid . DN.label) id) exampleSQLScanners)
                     )
+  , #faas := M.empty
     )
 
 exampleSQLScanners :: [DN.SQLScanner]
@@ -50,10 +51,10 @@ exampleSQLScanners =
   [ DN.SQLScanner
       ( #name := "dw-schedule"
       , #desc := "数仓调度系统扫描"
-      , #cron := def
-      , #sql_connect := SQLConnect
+      , #cron := DN.CronExpr "*/1 * * * *"
+      , #sql_connect := DN.SQLConnect
           ( #type := DN.Oracle
-          , #credential := Credential "10.132.37.241" 1521 "KB" "KB123456"
+          , #credential := DN.Credential "10.132.37.241" 1521 "KB" "KB123456"
           , #database_name := DN.DatabaseName "EDMP")
       , #sql := "SELECT * FROM KB.TB_INTERFACE_LOG"
       , #increment_field := ""
