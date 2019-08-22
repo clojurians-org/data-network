@@ -78,6 +78,35 @@ import qualified Control.Monad.Trans.Resource as R
 serveWebSocket :: MonadSnap m => MVar AppST ->  m ()
 serveWebSocket appST = runWebSocketsSnap (wsConduitApp appST)
 
+{--
+  faas <- U.readMVar appST  
+  let getter = lens #dataNetwork . lens #eventPulses . at name
+
+  let eventPulseMaybe = view getter faas
+  evalResult <- runExceptT $ do
+    eventPulse <- liftEither $ (maybeToRight "EventPulse_Not_Found" eventPulseMaybe)
+    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
+    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
+  (return . EventPulseARES . mapLeft show) evalResult
+
+--}
+activeEP :: R.MonadUnliftIO m => MVar AppST -> T.Text -> m (Either String ())
+activeEP appStM name = do
+  faas <- U.readMVar appStM
+  let getter = lens #dataNetwork . lens #eventPulses . at name
+      eventPulseMaybe = view getter faas
+  runExceptT $ do
+    eventPulse <- liftEither $ (maybeToRight "EventPulse_Not_Found" eventPulseMaybe)
+    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
+    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
+  
+
+rpcHandle :: (R.MonadResource m) => DN.RPCResponse -> m ()
+rpcHandle (DN.FaasNotifyPush (key, "ScannerItemsEvent", payload)) = do
+  
+  undefined
+rpcHandle _ = return ()
+
 wsConduitApp :: MVar AppST -> WS.ServerApp
 wsConduitApp appST pending= do
   putStrLn "ui-ws connection accepting ..."
@@ -96,8 +125,9 @@ wsConduitApp appST pending= do
 
     joinSource <- chanSource
               >=< ( rpcSource
---                 .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
+                 .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
                  .| C.concatMap J.decode
+                 .| C.iterM rpcHandle
                  .| C.map (J.encode . NodeRPCRes)
                  )
 
@@ -136,25 +166,13 @@ wsHandle :: (MonadIO m, R.MonadUnliftIO m) => MVar AppST -> WSRequestMessage -> 
 wsHandle appST AppInitREQ = do
   -- U.readMVar appST >>= liftIO . putStrLn . ("INIT REQ" ++ ) . show
   return . AppInitRES =<< U.readMVar appST
-
-
 wsHandle appST (HaskellCodeRunRequest r) =
   return . HaskellCodeRunResponse . mapLeft show =<< 
     (liftIO . I.runInterpreter . dynHaskell) r
-
-
 wsHandle appST (EventPulseAREQ name) = do
-  faas <- U.readMVar appST  
-  let getter = lens #dataNetwork . lens #eventPulses . at name
-
-  let eventPulseMaybe = view getter faas
-  evalResult <- runExceptT $ do
-    eventPulse <- liftEither $ (maybeToRight "EventPulse_Not_Found" eventPulseMaybe)
-    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
-    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
+--  faas <- U.readMVar appST  
+  evalResult <- activeEP  appST name
   (return . EventPulseARES . mapLeft show) evalResult
-
-
 wsHandle appST (DSOSQLCursorDatabaseRREQ cr "Oracle" database) = do
   DSOSQLCursorDatabaseRRES . Right <$> oracleShowTables cr database
   {--

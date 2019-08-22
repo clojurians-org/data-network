@@ -37,8 +37,10 @@ library
     , text-show
     , text-show-instances
     , unordered-containers
+    , hashable
     , aeson
     , data-default
+    , time
     , labels
     , labels-json
     , lens

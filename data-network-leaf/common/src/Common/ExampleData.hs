@@ -51,7 +51,7 @@ exampleSQLScanners =
   [ DN.SQLScanner
       ( #name := "dw-schedule"
       , #desc := "数仓调度系统扫描"
-      , #cron := DN.CronExpr "*/1 * * * *"
+      , #cron := DN.CronExpr "0/1 * * * *"
       , #sql_connect := DN.SQLConnect
           ( #type := DN.Oracle
           , #credential := DN.Credential "10.132.37.241" 1521 "KB" "KB123456"

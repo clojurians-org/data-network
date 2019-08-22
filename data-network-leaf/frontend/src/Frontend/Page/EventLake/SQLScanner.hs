@@ -50,6 +50,7 @@ eventLake_sqlScanner = do
       e0 <- (trEB $ createIcon >> trSQLScanner (constDyn (def :: DN.SQLScanner)) )
               <&> tagPromptlyDyn (return def)
       e1 <- fmap (switchDyn . fmap leftmost) . simpleList scannersD $ \v -> do
+        
         trE <- trEB $ do
           selectE >> trSQLScanner v
           text "active"          
@@ -57,16 +58,19 @@ eventLake_sqlScanner = do
             activeE <- buttonClass "ui button" $ elClass "i" "play blue icon" blank
             killE <- buttonClass "ui button" $ elClass "i" "pause blue icon" blank
             tellEventSingle $ flip tagPromptlyDyn activeE $ do
-              name <- v <&> L.get #name . DN.label
+              name <- v <&> DN.FaasKey "SQLScanner" . L.get #name . DN.label
               cron <- v <&> L.get #cron . DN.label
               return . NodeRPCReq . DN.FaasActiveReq $ (name, cron)
+            tellEventSingle $ flip tagPromptlyDyn killE $ do
+              name <- v <&> DN.FaasKey "SQLScanner" . L.get #name . DN.label
+              return . NodeRPCReq . DN.FaasKillReq $ name
         return (tagPromptlyDyn v trE)   
       return $ leftmost [e0, e1]
     scannerD <- holdDyn def scannerE
 
     divClass "ui hidden divider" blank
     divClass "ui grid" $ do
-      divClass "eight wide column" $ divClass "ui form" $ do
+      divClass "ten wide column" $ divClass "ui form" $ do
         divClass "field" $ do
           el "label" $ text "SQL脚本"
           dynEditor (constDyn "aaa")

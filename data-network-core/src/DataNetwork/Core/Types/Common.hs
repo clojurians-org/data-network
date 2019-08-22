@@ -45,7 +45,7 @@ credential host username password = do
 data CronExpr = CronExpr T.Text deriving (Generic, Show)
 instance J.ToJSON CronExpr
 instance J.FromJSON CronExpr
-instance Default CronExpr where def = CronExpr "*/5 * * * *"
+instance Default CronExpr where def = CronExpr "0/5 * * * *"
 
 data SQLType = PostgreSQL | Oracle | MySQL
   deriving (Generic, Show)

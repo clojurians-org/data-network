@@ -10,6 +10,8 @@ import GHC.Generics (Generic)
 import GHC.Int (Int64)
 import Control.Lens
 
+import Data.Time.Clock.POSIX (POSIXTime)
+
 import Data.Default (Default(def))
 import qualified Data.Text as T
 import Labels ((:=)(..))
@@ -26,7 +28,7 @@ type SQLScannerLabel =
   , "sql_connect" := DN.SQLConnect
   , "sql" := T.Text
   , "increment_field" := T.Text
-  , "xid" := Maybe Int64)
+  , "xid" := Maybe Int64 )
   
 data SQLScanner = SQLScanner SQLScannerLabel
   deriving (Generic, Show)
@@ -46,4 +48,10 @@ instance Default SQLScanner where
 instance DN.HasLabel SQLScanner where
   type instance Label SQLScanner = SQLScannerLabel
   label (SQLScanner r) = r
+  
 
+data SQLScannerNotifyEvent = ScannerItemsEvent [( "offset" := T.Text, "task_name" := T.Text, "task_event" := T.Text, "ts" := POSIXTime )]
+                           | ScannerScheduleEvent ( "offset" := T.Text, "ts" := POSIXTime )
+  deriving (Generic, Show)
+instance J.ToJSON SQLScannerNotifyEvent
+instance J.FromJSON SQLScannerNotifyEvent

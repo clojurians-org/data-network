@@ -38,6 +38,7 @@ executable data-network-node
     , mtl
     , stm
     , async
+    , time
     , cron
 
     , snap-core

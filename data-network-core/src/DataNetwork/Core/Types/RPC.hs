@@ -14,24 +14,34 @@ import qualified Data.Aeson as J
 import Labels ((:=)(..))
 import Labels.JSON ()
 
+import Data.Hashable (Hashable(..))
 
 data FaasStatus = FaasActived | FaasKilled deriving (Generic, Show)
 instance J.ToJSON FaasStatus
 instance J.FromJSON FaasStatus
 
-type FaasInfo = ( "name" := T.Text, "cron" := DN.CronExpr, "status" := FaasStatus )
+type FaasInfo = ( "id" := FaasKey, "status" := FaasStatus, "run" := J.Value )
 
-data RPCRequest = FaasActiveReq (T.Text, DN.CronExpr)
-                | FaasKillReq T.Text
-                | FaasReadReq T.Text
+data RPCRequest = FaasActiveReq (FaasKey, DN.CronExpr)
+                | FaasKillReq FaasKey
+                | FaasReadReq FaasKey
   deriving (Generic, Show)
 instance J.ToJSON RPCRequest
 instance J.FromJSON RPCRequest
 
-data RPCResponse = FaasActiveRes (Either String (T.Text, DN.CronExpr))
-                 | FaasKillRes (Either String T.Text)
+data FaasKey = FaasKey {
+    faasKeyType :: T.Text
+  , faasKeyName :: T.Text
+  } deriving (Generic, Show, Eq)
+instance J.ToJSON FaasKey
+instance J.FromJSON FaasKey
+instance Hashable FaasKey
+
+type EventTag = T.Text
+data RPCResponse = FaasActiveRes (Either String (FaasKey, DN.CronExpr))
+                 | FaasKillRes (Either String FaasKey)
                  | FaasReadRes (Either String (Maybe FaasInfo))
-                 | FaasNotifyRes' (Either String (T.Text, J.Value))
+                 | FaasNotifyPush (FaasKey, EventTag, J.Value)
                  | FaasUnhandle RPCRequest
                  | FaasDebug T.Text
   deriving (Generic, Show)

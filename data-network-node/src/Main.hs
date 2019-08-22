@@ -1,16 +1,13 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE OverloadedLabels,  DataKinds, TypeOperators #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module Main where
 
-import qualified DataNetwork.Core.Types as Node
+import qualified DataNetwork.Core.Types as DN
 import Prelude
 import Control.Lens
 
@@ -18,7 +15,7 @@ import Labels ((:=)(..))
 import qualified Labels as L
 import Labels.JSON ()
 
-
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import GHC.Generics (Generic)
 import Data.Maybe (isJust, fromJust)
 import qualified Data.ByteString.Lazy as B
@@ -57,7 +54,7 @@ makeLenses ''App
 type Trigger = ( "in" := Chan.TBMChan B.ByteString
                , "out" := Chan.TBMChan B.ByteString )
 
-type AppST = M.HashMap T.Text (ThreadId, Node.FaasInfo)
+type AppST = M.HashMap DN.FaasKey (ThreadId, DN.FaasInfo)
 
 main :: IO ()
 main = R.runResourceT $ do
@@ -87,31 +84,42 @@ serveFaaSAsync stM = do
   return (#in := inChan, #out := outChan)
 
 faasHandle :: (R.MonadResource m, U.MonadUnliftIO m)
-  => U.MVar AppST -> Chan.TBMChan B.ByteString -> Node.RPCRequest -> m Node.RPCResponse
-faasHandle stM outChan (Node.FaasActiveReq faas@(name, Node.CronExpr cronExpr)) = do
+  => U.MVar AppST -> Chan.TBMChan B.ByteString -> DN.RPCRequest -> m DN.RPCResponse
+faasHandle stM outChan (DN.FaasActiveReq faas@(key, DN.CronExpr cronExpr)) = do
   liftIO $ putStrLn "FaasActiveReq handle..."
-  tids <- liftIO $ Cron.execSchedule $ Cron.addJob (activeSQLScanner outChan) cronExpr
-  U.modifyMVar_ stM $ return . set (at name)
-      (Just (head tids, ( #name := name
-                        , #cron := Node.CronExpr cronExpr
-                        , #status := Node.FaasActived)))
-  return . Node.FaasActiveRes . Right $ faas
+  tids <- liftIO $ Cron.execSchedule $ Cron.addJob (activeSQLScanner outChan key) cronExpr
+  U.modifyMVar_ stM $ return . set (at key)
+      (Just (head tids, ( #id := key
+                        , #status := DN.FaasActived
+                        , #run := J.Null)))
+  return . DN.FaasActiveRes . Right $ faas
   
-faasHandle stM outChan (Node.FaasKillReq name) = do
+faasHandle stM outChan (DN.FaasKillReq key) = do
   st <- U.readMVar stM
-  let tidMaybe = st ^. (at name . to (fmap fst))
+  let tidMaybe = st ^. (at key . to (fmap fst))
   when (isJust tidMaybe) $ liftIO . killThread . fromJust $ tidMaybe
-  U.modifyMVar_ stM $ return . set (ix name . _2 . L.lens #status) Node.FaasKilled
-  return . Node.FaasKillRes . Right $ name
+  U.modifyMVar_ stM $ return . set (ix key . _2 . L.lens #status) DN.FaasKilled
+  return . DN.FaasKillRes . Right $ key
   
-faasHandle stM outChan (Node.FaasReadReq faas) = do
-  U.readMVar stM <&> (^. at faas . to (Node.FaasReadRes . Right . fmap snd))
+faasHandle stM outChan (DN.FaasReadReq faas) = do
+  U.readMVar stM <&> (^. at faas . to (DN.FaasReadRes . Right . fmap snd))
   
 -- faasHandle stM outChan req = return . WSUnhandle $ req
 
-
-activeSQLScanner outChan = do
-  U.atomically $ Chan.writeTBMChan outChan (J.encode . Node.FaasDebug $ "hello world")
+activeSQLScanner :: (MonadIO m) => CC.TBMChan B.ByteString -> DN.FaasKey -> m ()
+activeSQLScanner outChan key@(DN.FaasKey _ name) = do
+  liftIO $ putStrLn ("activeSQLScanner:" <> cs name)
+  ts <- liftIO $ getPOSIXTime
+  U.atomically $ Chan.writeTBMChan outChan $ J.encode $
+    DN.FaasNotifyPush ( key, "ScannerItemsEvent"
+                      , J.toJSON . DN.ScannerItemsEvent $
+                          [ ( #offset := "1", #task_name := "LARLUO", #task_event := "START", #ts := ts )
+                          , ( #offset := "3", #task_name := "LARLUO2", #task_event := "START", #ts := ts ) ])
+    
+  U.atomically $ Chan.writeTBMChan outChan $ J.encode $
+    DN.FaasNotifyPush ( key, "ScannerScheduleEvent", J.toJSON . DN.ScannerScheduleEvent $ ( #offset := "3", #ts := ts ))
+    
+--    DN.FaasDebug $ name
   
 app :: Trigger -> SnapletInit App App
 app trigger = makeSnaplet "data-network-node"
