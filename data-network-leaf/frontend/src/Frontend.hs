@@ -202,10 +202,12 @@ handleWSRequest wsURL wsRequests = do
 updateGlobal :: WSResponseMessage -> Endo (FaaSCenter, WSResponseMessage)
 updateGlobal = \case
   msg@(AppInitRES state0) -> Endo $ const (state0, msg)
+  {--
   msg@(DSEFSSFtpDirectoryRRES _) -> Endo $ \(stat, oldMsg) -> (stat, msg)
   msg@(DSOSQLCursorDatabaseRRES _) -> Endo $ \(stat, oldMsg) -> (stat, msg)
-  msg@(DSOSQLCursorTableRRES _) -> Endo $ \(stat, oldMsg) -> (stat, msg)  
-  _ -> mempty
+  msg@(DSOSQLCursorTableRRES _) -> Endo $ \(stat, oldMsg) -> (stat, msg)
+  --}
+  msg -> Endo $ \(stat, oldMsg) -> (stat, msg)
 
 page :: forall t js m.
   ( DomBuilder t m --, Prerender js m

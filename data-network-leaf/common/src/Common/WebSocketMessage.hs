@@ -53,12 +53,14 @@ data WSRequestMessage = AppInitREQ
                     -- EventPulse
                     | EventPulseCREQ EventPulse
                     | EventPulseAREQ T.Text
-                    | EventPulseKREQ T.Text                    
+                    | EventPulseKREQ T.Text
                     -- CronTimer
                     | ELCronTimerCREQ ELCronTimer
                     | ELCronTimerRREQ Int64
                     | ELCronTimerUREQ ELCronTimer
                     | ELCronTimerDREQ Int64
+                    -- SQLScanner
+                    | ELSQLScannerSQLActiveReq T.Text
                     -- SQLCursor
                     | DSOSQLCursorCREQ DSOSQLCursor
                     | DSOSQLCursorRREQ Int64
@@ -81,12 +83,15 @@ data WSResponseMessage = NeverRES
                      -- EventPulse
                      | EventPulseCRES (Either String EventPulse)
                      | EventPulseARES (Either String ())
-                     | EventPulseKRES (Either String ())                     
+                     | EventPulseKRES (Either String ())
+                     
                      -- CronTimer
                      | ELCronTimerCRES (Either String ELCronTimer)
                      | ELCronTimerRRES (Either String ELCronTimer)
                      | ELCronTimerURES (Either String ELCronTimer)
                      | ELCronTimerDRES (Either String Int64)
+                     -- SQLScanner
+                     | ELSQLScannerSQLActiveRes (Either String String)
 
                      -- SQLCursor
                      | DSOSQLCursorCRES (Either String DSOSQLCursor)

@@ -35,6 +35,9 @@ data FaasKey = FaasKey {
   } deriving (Generic, Show, Eq)
 instance J.ToJSON FaasKey
 instance J.FromJSON FaasKey
+instance J.ToJSONKey FaasKey
+instance J.FromJSONKey FaasKey
+
 instance Hashable FaasKey
 
 type EventTag = T.Text

@@ -56,7 +56,13 @@ exampleSQLScanners =
           ( #type := DN.Oracle
           , #credential := DN.Credential "10.132.37.241" 1521 "KB" "KB123456"
           , #database_name := DN.DatabaseName "EDMP")
-      , #sql := "SELECT * FROM KB.TB_INTERFACE_LOG"
+      , #sql := [str| SELECT t2.RUN_END_DATE as OFFSET
+                    |      , t1.JOB_NAME
+                    |      , t2.EXECUTE_STATE
+                    |   FROM SCH_CURR_JOB t1
+                    |  INNER JOIN SCH_CURR_JOBSTATE t2
+                    |     ON t1.JOB_SEQ = T2.JOB_SEQ
+                    |]
       , #increment_field := ""
       , #xid := Just 1 )
     ]
@@ -82,7 +88,18 @@ exampleDataSources =
                        , dsoSQLCursorPassword = "KB123456"
                        , dsoSQLCursorTable = "KB.TB_INTERFACE_LOG"
                        , dsoSQLCursorFields = []
-                       , dsoSQLCursorXid = Just 2})         
+                       , dsoSQLCursorXid = Just 2})
+  , DSO_SQLCursor (def { dsoSQLCursorName = "sqlCursor_ora_schedule"
+                       , dsoSQLCursorDesc = "sqlCursor_ora_schedule"
+                       , dsoSQLCursorType = "Oracle"
+                       , dsoSQLCursorHost = "10.129.35.227:1521"
+                       , dsoSQLCursorDatabase = "EDWDB"
+                       , dsoSQLCursorUsername = "SCHNEW"
+                       , dsoSQLCursorPassword = "SCHNEW"
+                       , dsoSQLCursorTable = "KB.TB_INTERFACE_LOG"
+                       , dsoSQLCursorFields = []
+                       , dsoSQLCursorXid = Just 3})         
+    
     ]
 
 

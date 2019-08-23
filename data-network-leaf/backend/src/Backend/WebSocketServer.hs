@@ -101,11 +101,12 @@ activeEP appStM name = do
     ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
   
 
-rpcHandle :: (R.MonadResource m) => DN.RPCResponse -> m ()
-rpcHandle (DN.FaasNotifyPush (key, "ScannerItemsEvent", payload)) = do
-  
-  undefined
-rpcHandle _ = return ()
+rpcHandle :: (R.MonadResource m, R.MonadUnliftIO m) => MVar AppST -> DN.RPCResponse -> m ()
+rpcHandle appStM (DN.FaasNotifyPush (DN.FaasKey xtype name, "ScannerItemsEvent", payload)) = do
+--  let scannerItemsEvent = J.fromJSON payload :: J.Result DN.SQLScannerNotifyEvent
+--  void $ activeEP appStM name
+  return ()
+rpcHandle _ _ = return ()
 
 wsConduitApp :: MVar AppST -> WS.ServerApp
 wsConduitApp appST pending= do
@@ -127,7 +128,7 @@ wsConduitApp appST pending= do
               >=< ( rpcSource
                  .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
                  .| C.concatMap J.decode
-                 .| C.iterM rpcHandle
+                 .| C.iterM (rpcHandle appST)
                  .| C.map (J.encode . NodeRPCRes)
                  )
 
@@ -174,7 +175,10 @@ wsHandle appST (EventPulseAREQ name) = do
   evalResult <- activeEP  appST name
   (return . EventPulseARES . mapLeft show) evalResult
 wsHandle appST (DSOSQLCursorDatabaseRREQ cr "Oracle" database) = do
-  DSOSQLCursorDatabaseRRES . Right <$> oracleShowTables cr database
+  liftIO $ putStrLn (show cr <> "-" <> cs database)
+  r <- DSOSQLCursorDatabaseRRES . Right . take 100 <$> oracleShowTables cr database
+  liftIO $ putStrLn (show r)
+  return r
   {--
   DSOSQLCursorDatabaseRRES . Right <$> return [ (#schema := "larluo", #table :="haskell")
                                               , (#schema := "larluo", #table := "clojure")]
@@ -229,4 +233,8 @@ replRun = do
   wsHandle undefined
     (DSEFSSFtpDirectoryRREQ (Credential "10.132.37.201" 22 "op" "op") (Just ".")) >>= print
   --}
-  undefined
+  b <- oracleDescribeTable (DN.Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB"
+         ("SCHNEW", "SCH_CURR_JOB")
+  -- SCH_CURR_JOBSTATE
+  -- SCH_CURR_JOB
+  mapM_ print b

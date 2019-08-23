@@ -111,3 +111,5 @@ oracleDescribeTable credential database (schema, table) = do
       <$> fmap (#name :=) (textOracle (xs !! 0))
       <*> fmap (#type :=) (textOracle (xs !! 1))
       <*> fmap (#desc :=) (textOracle (xs !! 2))
+
+--oracleSelectSQL 

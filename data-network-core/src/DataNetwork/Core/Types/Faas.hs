@@ -50,8 +50,18 @@ instance DN.HasLabel SQLScanner where
   label (SQLScanner r) = r
   
 
-data SQLScannerNotifyEvent = ScannerItemsEvent [( "offset" := T.Text, "task_name" := T.Text, "task_event" := T.Text, "ts" := POSIXTime )]
-                           | ScannerScheduleEvent ( "offset" := T.Text, "ts" := POSIXTime )
+type ScannerItem = ( "offset" := T.Text, "task_name" := T.Text, "task_event" := T.Text, "ts" := POSIXTime )
+type ScannerSchedule = ( "offset" := T.Text, "ts" := POSIXTime )
+data SQLScannerNotifyEvent = ScannerItemsEvent [ScannerItem]
+                           | ScannerScheduleEvent ScannerSchedule
   deriving (Generic, Show)
 instance J.ToJSON SQLScannerNotifyEvent
 instance J.FromJSON SQLScannerNotifyEvent
+
+parseJScannerItems :: J.Value -> Maybe [ScannerItem]
+parseJScannerItems json =
+  case J.fromJSON json of
+    J.Success (ScannerItemsEvent r) -> Just r
+    _ -> Nothing
+    
+                        

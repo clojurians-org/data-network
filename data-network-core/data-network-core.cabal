@@ -19,12 +19,14 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:
-      DataNetwork.Core.Types
+      DataNetwork.Core
+    , DataNetwork.Core.Types
     , DataNetwork.Core.Conduit
   other-modules:
       DataNetwork.Core.Types.Common
     , DataNetwork.Core.Types.RPC
     , DataNetwork.Core.Types.Faas
+    , DataNetwork.Core.Utils
     , DataNetwork.Core.Conduit.Oracle
 
   -- other-extensions:
