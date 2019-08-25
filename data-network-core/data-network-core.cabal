@@ -28,6 +28,7 @@ library
     , DataNetwork.Core.Types.Faas
     , DataNetwork.Core.Utils
     , DataNetwork.Core.Conduit.Oracle
+    , DataNetwork.Core.Conduit.PostgreSQL
 
   -- other-extensions:
   build-depends:       
@@ -50,6 +51,8 @@ library
     , transformers
     , mtl
     , unliftio
+    , monad-control
+    , lifted-base
 
     , resourcet
     , conduit

@@ -42,7 +42,7 @@ import Data.Conduit.TMChan (sourceTBMChan)
 
 import qualified UnliftIO as U
 
-import Labels
+import Labels ((:=)(..))
 
 instance Oracle.FromDataField (T.Text, J.Value) where
   fromDataField fd@Oracle.DataField{..} = runMaybeT $ do
@@ -133,7 +133,7 @@ oracleShowTables credential database =
   runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
-    sql = [str| select owner, table_name
+    sql = [str| select owner as schema, table_name as table
               | from all_tables
               | where tablespace_name not in ('SYSTEM', 'SYSAUX')
               |]
@@ -145,8 +145,9 @@ oracleDescribeTable credential database (schema, table) = do
   runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
-    sql = "select t1.column_name, t1.data_type, t2.comments from all_tab_columns t1 inner join all_col_comments t2"
-          <> "  on t1.owner = t2.owner and t1.table_name = t2.table_name and t1.column_name = t2.column_name"
-          <> "  where t1.owner = '" <> schema <> "' AND t1.table_name = '" <> table <> "'"
+    sql =    "select t1.column_name as name, t1.data_type as type, t2.comments as desc \n"
+          <> "  from all_tab_columns t1 inner join all_col_comments t2 \n"
+          <> "    on t1.owner = t2.owner and t1.table_name = t2.table_name and t1.column_name = t2.column_name\n"
+          <> " where t1.owner = '" <> schema <> "' AND t1.table_name = '" <> table <> "'\n"
 
 --oracleSelectSQL 
