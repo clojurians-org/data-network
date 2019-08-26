@@ -37,6 +37,7 @@ library
     , text
     , heredoc
     , string-conversions
+    , interpolatedstring-perl6
     , text-show
     , text-show-instances
     , vector
@@ -48,6 +49,7 @@ library
     , labels
     , labels-json
     , lens
+    , lens-aeson
     , transformers
     , mtl
     , unliftio

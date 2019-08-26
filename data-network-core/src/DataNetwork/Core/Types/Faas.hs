@@ -53,7 +53,8 @@ instance DN.HasLabel SQLScanner where
 type ScannerItem = ( "offset" := T.Text, "task_name" := T.Text, "task_event" := T.Text, "ts" := POSIXTime )
 type ScannerSchedule = ( "offset" := T.Text, "ts" := POSIXTime )
 data SQLScannerNotifyEvent = ScannerItemsEvent [ScannerItem]
-                           | ScannerScheduleEvent ScannerSchedule
+                           | ScannerScheduleEnterEvent ScannerSchedule
+                           | ScannerScheduleLeaveEvent ScannerSchedule
   deriving (Generic, Show)
 instance J.ToJSON SQLScannerNotifyEvent
 instance J.FromJSON SQLScannerNotifyEvent

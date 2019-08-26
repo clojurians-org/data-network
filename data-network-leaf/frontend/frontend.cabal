@@ -12,7 +12,7 @@ library
                , reflex-dom
                , obelisk-generated-static
                , text
-               , semantic-reflex
+--               , semantic-reflex
                , random
                , filepath
 

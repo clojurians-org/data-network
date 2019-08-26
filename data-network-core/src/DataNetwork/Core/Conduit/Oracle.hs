@@ -1,4 +1,4 @@
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude, DeriveGeneric, LambdaCase, ExtendedDefaultRules #-}
 {-# lANGUAGE TupleSections, DataKinds, TypeOperators #-}
 {-# LANGUAGE RankNTypes, FlexibleInstances, RecordWildCards #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -10,13 +10,16 @@ import DataNetwork.Core.Types
 import DataNetwork.Core.Utils
 
 import Prelude
+--import qualified Text.Show as T
+import TextShow
 import Data.Maybe (catMaybes)
-import Data.Conduit (ConduitT, runConduit, runConduitRes, bracketP, yield, (.|))
+import Data.Conduit ((.|))
+import qualified Data.Conduit as C
 import qualified Data.Conduit.Combinators as C
-import qualified Data.Conduit.List as CL
 import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.Aeson as J
+import qualified Data.Aeson.Lens as J
 
 import qualified Data.Vector as V
 import qualified Data.HashMap.Lazy as M
@@ -35,7 +38,7 @@ import Control.Monad.Trans.Maybe (MaybeT(..))
 import Control.Monad.Trans.Resource (MonadResource, allocate, release, runResourceT)
 import Control.Monad.Trans (MonadIO(liftIO), MonadTrans(lift))
 import Control.Exception (finally, catch, SomeException(..))
-import Control.Monad (when, void)
+import Control.Monad (when, void, forM_)
 
 import Control.Concurrent.STM.TBMChan (TBMChan, newTBMChanIO, closeTBMChan, writeTBMChan, readTBMChan)
 import Data.Conduit.TMChan (sourceTBMChan)
@@ -43,6 +46,10 @@ import Data.Conduit.TMChan (sourceTBMChan)
 import qualified UnliftIO as U
 
 import Labels ((:=)(..))
+import Control.Lens
+import Data.Maybe (fromJust)
+
+import Text.InterpolatedString.Perl6 (q, qc, qq)
 
 instance Oracle.FromDataField (T.Text, J.Value) where
   fromDataField fd@Oracle.DataField{..} = runMaybeT $ do
@@ -130,7 +137,7 @@ oracleJSONChan credential database sql = oracleRawChan credential database sql d
 oracleShowTables ::  forall m. (MonadIO m, U.MonadUnliftIO m)
   => Credential -> T.Text -> m [("schema" := T.Text, "table" := T.Text)]
 oracleShowTables credential database =
-  runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
+  C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
     sql = [str| select owner as schema, table_name as table
@@ -141,8 +148,7 @@ oracleShowTables credential database =
 oracleDescribeTable :: forall m. (MonadIO m, U.MonadUnliftIO m)
   => Credential -> T.Text -> (T.Text, T.Text) -> m [("name" := T.Text, "type" := T.Text, "desc" := T.Text)]
 oracleDescribeTable credential database (schema, table) = do
-  liftIO $ print sql
-  runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
+  C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
     sql =    "select t1.column_name as name, t1.data_type as type, t2.comments as desc \n"
@@ -150,4 +156,53 @@ oracleDescribeTable credential database (schema, table) = do
           <> "    on t1.owner = t2.owner and t1.table_name = t2.table_name and t1.column_name = t2.column_name\n"
           <> " where t1.owner = '" <> schema <> "' AND t1.table_name = '" <> table <> "'\n"
 
---oracleSelectSQL 
+maxOracleOffset :: forall m. (MonadIO m, U.MonadUnliftIO m)
+  => Credential -> T.Text -> T.Text -> m J.Value
+maxOracleOffset credential database sql = do
+
+  C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
+    <&> fromJust . (^? _head . (J.key "MAX_OFFSET" :: Traversal' J.Value J.Value))
+  where
+    chan = oracleJSONChan credential database sql'
+    sql' = [qc| SELECT MAX(offset) AS MAX_OFFSET FROM ( { sql } ) t |]
+
+aboveOracleOffset :: forall m. (MonadIO m, U.MonadUnliftIO m)
+  => Maybe J.Value -> Credential -> T.Text -> T.Text -> m ([J.Value], Maybe J.Value)
+aboveOracleOffset offsetMv credential database sql = do
+  offset <- maybe (maxOracleOffset credential database sql) return offsetMv
+--  liftIO $ printT (mkSQL offset)
+  C.runConduitRes
+     $ (lift (chan offset) >>= sourceTBMChan) .| C.concatMap id
+    .| C.getZipConduit ((,) <$> C.ZipConduit C.sinkList
+                            <*> C.ZipConduit ( C.concatMap (^? J.key "OFFSET")
+                                            .| fmap Just (C.foldl maxOffset J.Null)))
+
+  --undefined             
+  where
+    chan = oracleJSONChan credential database . mkSQL
+    mkSQL = \case
+      J.Null -> [qc| { sql } |]
+      J.String s -> [qc| SELECT * FROM ({ sql }) t WHERE t.OFFSET > '{s}' |]
+      J.Number n -> [qc| SELECT * FROM ({ sql }) t WHERE t.OFFSET > {n} |]
+      x -> error ("unhandle json type: " <> show x)
+    maxOffset :: J.Value -> J.Value -> J.Value
+    maxOffset (J.String a) (J.String b) = J.String (max a b)
+    maxOffset (J.Number a) (J.Number b) = J.Number (max a b)
+    maxOffset J.Null b = b
+    maxOffset a J.Null = a
+    maxOffset a b = error ("unhandle: " <> show a <> show b)
+
+oracleRepl :: IO ()
+oracleRepl = do
+  (rs, mv') <- aboveOracleOffset (Just J.Null) (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql
+  printT . show $ mv'
+  --forM_ rs (printT . show)
+  printT "finished"  
+  where
+    sql = [str| SELECT t2.RUN_END_DATE as OFFSET
+              |      , t1.JOB_NAME
+              |      , t2.EXECUTE_STATE
+              |   FROM SCH_CURR_JOB t1
+              |  INNER JOIN SCH_CURR_JOBSTATE t2
+              |     ON t1.JOB_SEQ = T2.JOB_SEQ
+              |]

@@ -87,7 +87,7 @@ faasHandle :: (R.MonadResource m, U.MonadUnliftIO m)
   => U.MVar AppST -> Chan.TBMChan B.ByteString -> DN.RPCRequest -> m DN.RPCResponse
 faasHandle stM outChan (DN.FaasActiveReq faas@(key, DN.CronExpr cronExpr)) = do
   liftIO $ putStrLn "FaasActiveReq handle..."
-  tids <- liftIO $ Cron.execSchedule $ Cron.addJob (activeSQLScanner outChan key) cronExpr
+  tids <- liftIO $ Cron.execSchedule $ Cron.addJob (activeSQLScanner outChan stM key) cronExpr
   U.modifyMVar_ stM $ return . set (at key)
       (Just (head tids, ( #id := key
                         , #status := DN.FaasActived
@@ -106,10 +106,11 @@ faasHandle stM outChan (DN.FaasReadReq faas) = do
   
 -- faasHandle stM outChan req = return . WSUnhandle $ req
 
-activeSQLScanner :: (MonadIO m) => CC.TBMChan B.ByteString -> DN.FaasKey -> m ()
-activeSQLScanner outChan key@(DN.FaasKey _ name) = do
+activeSQLScanner :: (MonadIO m) => CC.TBMChan B.ByteString -> U.MVar AppST -> DN.FaasKey -> m ()
+activeSQLScanner outChan appStMv key@(DN.FaasKey _ name) = do
   liftIO $ putStrLn ("activeSQLScanner:" <> cs name)
   ts <- liftIO $ getPOSIXTime
+  
   U.atomically $ Chan.writeTBMChan outChan $ J.encode $
     DN.FaasNotifyPush ( key, "ScannerItemsEvent"
                       , J.toJSON . DN.ScannerItemsEvent $
@@ -117,7 +118,7 @@ activeSQLScanner outChan key@(DN.FaasKey _ name) = do
                           , ( #offset := "3", #task_name := "LARLUO2", #task_event := "START", #ts := ts ) ])
     
   U.atomically $ Chan.writeTBMChan outChan $ J.encode $
-    DN.FaasNotifyPush ( key, "ScannerScheduleEvent", J.toJSON . DN.ScannerScheduleEvent $ ( #offset := "3", #ts := ts ))
+    DN.FaasNotifyPush ( key, "ScannerScheduleEvent", J.toJSON . DN.ScannerScheduleEvent $ ( #offset := "3", #ts := ts ) )
     
 --    DN.FaasDebug $ name
   
