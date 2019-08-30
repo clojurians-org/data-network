@@ -6,6 +6,7 @@
 
 module DataNetwork.Core.Types.RPC where
 
+import DataNetwork.Core.Utils
 import qualified DataNetwork.Core.Types.Common as DN
 import Prelude
 import GHC.Generics (Generic)
@@ -15,12 +16,16 @@ import Labels ((:=)(..))
 import Labels.JSON ()
 
 import Data.Hashable (Hashable(..))
+import qualified Data.Vinyl as V
+import Data.Vinyl ((=:), (:::))
 
 data FaasStatus = FaasActived | FaasKilled deriving (Generic, Show)
 instance J.ToJSON FaasStatus
 instance J.FromJSON FaasStatus
 
-type FaasInfo = ( "id" := FaasKey, "status" := FaasStatus, "run" := J.Value )
+type FaasInfo = V.Rec V.ElField '["id" :::  FaasKey, "status" ::: FaasStatus, "run" ::: J.Value]
+-- , "status" := FaasStatus, "run" := J.Value )
+-- type FaasInfo = "id" := FaasKey
 
 data RPCRequest = FaasActiveReq (FaasKey, DN.CronExpr)
                 | FaasKillReq FaasKey

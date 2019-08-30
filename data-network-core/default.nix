@@ -1,3 +1,4 @@
+# nix-channel --add https://nixos.org/channels/nixos-19.03
 # export NIX_PATH=~/.nix-defexpr/channels
 { nixpkgs ? import <nixos-19.03> {}} :
 
@@ -51,11 +52,21 @@ let
           sha256 = "1fs055hj46mjvmq1jfs48skclxfv431mnihjaqnmd2qvja23yvmk" ;
         }) {})) ;
       
-      hlibssh2 = dontCheck (doJailbreak (
-        addBuildDepends 
+      hlibssh2 = dontCheck (doJailbreak (addBuildDepends 
           (addPkgconfigDepends (self.callCabal2nix "hlibssh2" ../dep/libssh2-hs/hlibssh2 {}) [libssh2] )
           [libssh2]
-      )) ;
+        )) ;
+      vinyl = overrideCabal (
+        self.callCabal2nix "vinyl" (pkgs.fetchFromGitHub {
+            owner = "VinylRecords" ;
+            repo = "Vinyl" ;
+            rev = "81d6e33f86e5bc621b89e30caad8a76b23742ef4" ;
+            sha256 = "1ynjv2lsz30pvl9ki9fb5yprb5p7wwvs7g6sfj03s0ra171m0grn" ;
+        }) {}
+      ) (drv : {
+          doCheck = false ;
+          jailbreak = true ;
+      }) ;
 
     } ;
   } ;

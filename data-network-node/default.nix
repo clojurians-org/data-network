@@ -68,6 +68,29 @@ let
         doCheck = false ;
       }) ;
       cron = dontCheck super.cron ;
+      vinyl = overrideCabal (
+        self.callCabal2nix "vinyl" (pkgs.fetchFromGitHub {
+            owner = "VinylRecords" ;
+            repo = "Vinyl" ;
+            rev = "81d6e33f86e5bc621b89e30caad8a76b23742ef4" ;
+            sha256 = "1ynjv2lsz30pvl9ki9fb5yprb5p7wwvs7g6sfj03s0ra171m0grn" ;
+        }) {}
+      ) (drv : {
+          doCheck = false ;
+          jailbreak = true ;
+      }) ;
+      vinyl-generics = overrideCabal (
+        self.callCabal2nix "vinyl" (pkgs.fetchFromGitHub {
+            owner = "VinylRecords" ;
+            repo = "Vinyl-generics" ;
+            rev = "27e0054a0aeb804e6c8ad3d635cc1815a91cd57c" ;
+            sha256 = "1fcfc72s61d5j3r3clz3k54pr3vxwg1k895bamaq6szqscp4324c" ;
+        }) {}
+      ) (drv : {
+          doCheck = false ;
+          jailbreak = true ;
+      }) ;
+
     } ;
   } ;
 in

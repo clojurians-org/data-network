@@ -34,6 +34,8 @@ executable data-network-node
     , aeson
     , labels
     , labels-json
+    , vinyl
+    , vinyl-generics
     , lens
     , mtl
     , stm
@@ -58,6 +60,9 @@ executable data-network-node
 
 
     , unliftio
+    , monad-control
+    , lifted-base
+    , lifted-async
 
   hs-source-dirs:      src
   default-language:    Haskell2010

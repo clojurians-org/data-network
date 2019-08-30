@@ -1,19 +1,23 @@
-{-# LANGUAGE NoImplicitPrelude, OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings, DeriveGeneric, ExtendedDefaultRules #-}
+{-# LANGUAGE LambdaCase, TypeApplications, ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedLabels,  DataKinds, TypeOperators #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
-import qualified DataNetwork.Core.Types as DN
+import qualified DataNetwork.Core as DN
 import Prelude
 import Control.Lens
+
+--import GHC
 
 import Labels ((:=)(..))
 import qualified Labels as L
 import Labels.JSON ()
+import Text.Heredoc (str)
 
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import GHC.Generics (Generic)
@@ -41,12 +45,21 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit.List as CL
 import qualified Data.Conduit.TMChan as CC
 
-import qualified UnliftIO as U
+
 import Data.String.Conversions (cs)
 
 import Control.Concurrent (ThreadId, threadDelay, forkIO, killThread)
 import System.Cron as Cron
 import qualified Data.HashMap.Lazy as M
+
+import Data.Vinyl ((=:), Rec(..))
+import qualified Data.Vinyl as V
+import qualified Data.Vinyl.Generics as V
+
+import qualified Control.Concurrent.MVar.Lifted as L
+import Control.Monad.Trans.Control (MonadTransControl(..), MonadBaseControl(..))
+import qualified UnliftIO as U
+
 
 data App = App
 makeLenses ''App
@@ -55,6 +68,9 @@ type Trigger = ( "in" := Chan.TBMChan B.ByteString
                , "out" := Chan.TBMChan B.ByteString )
 
 type AppST = M.HashMap DN.FaasKey (ThreadId, DN.FaasInfo)
+
+-- runlens :: DN.FaasKey -> Lens' AppST J.Value
+-- runlens k = ix k . _2 
 
 main :: IO ()
 main = R.runResourceT $ do
@@ -106,19 +122,40 @@ faasHandle stM outChan (DN.FaasReadReq faas) = do
   
 -- faasHandle stM outChan req = return . WSUnhandle $ req
 
-activeSQLScanner :: (MonadIO m) => CC.TBMChan B.ByteString -> U.MVar AppST -> DN.FaasKey -> m ()
+activeSQLScanner :: (U.MonadUnliftIO m, MonadBaseControl IO m) =>
+  CC.TBMChan B.ByteString -> U.MVar AppST -> DN.FaasKey -> m ()
 activeSQLScanner outChan appStMv key@(DN.FaasKey _ name) = do
+  let 
+    sql = [str| SELECT t2.RUN_END_DATE as OFFSET
+              |      , t1.JOB_NAME
+              |      , t2.EXECUTE_STATE
+              |   FROM SCH_CURR_JOB t1
+              |  INNER JOIN SCH_CURR_JOBSTATE t2
+              |     ON t1.JOB_SEQ = T2.JOB_SEQ
+              |]
+--  liftIO $ 
+  appSt <- L.readMVar appStMv
   liftIO $ putStrLn ("activeSQLScanner:" <> cs name)
-  ts <- liftIO $ getPOSIXTime
-  
+  tsEnter <- liftIO $ getPOSIXTime
+
+  sinkEvent $  DN.FaasNotifyPush
+    ( key, "ScannerScheduleEnterEvent"
+    , J.toJSON . DN.ScannerScheduleEnterEvent $ ( #offset := "3", #ts := tsEnter ) )
+
+  (rs, mv') <- DN.aboveOracleOffset (Just J.Null) (DN.Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql
+  {--
   U.atomically $ Chan.writeTBMChan outChan $ J.encode $
     DN.FaasNotifyPush ( key, "ScannerItemsEvent"
                       , J.toJSON . DN.ScannerItemsEvent $
                           [ ( #offset := "1", #task_name := "LARLUO", #task_event := "START", #ts := ts )
                           , ( #offset := "3", #task_name := "LARLUO2", #task_event := "START", #ts := ts ) ])
-    
-  U.atomically $ Chan.writeTBMChan outChan $ J.encode $
-    DN.FaasNotifyPush ( key, "ScannerScheduleEvent", J.toJSON . DN.ScannerScheduleEvent $ ( #offset := "3", #ts := ts ) )
+  --}
+
+  tsLeave <- liftIO $ getPOSIXTime    
+  sinkEvent $ DN.FaasNotifyPush
+    ( key, "ScannerScheduleLeaveEvent"
+    , J.toJSON . DN.ScannerScheduleLeaveEvent $ ( #offset := "3", #ts := tsLeave ) )
+  where sinkEvent = U.atomically . Chan.writeTBMChan outChan . J.encode
     
 --    DN.FaasDebug $ name
   
@@ -156,3 +193,11 @@ serveWS trigger pending = R.runResourceT $ do
 -- WSAdminReq FaasActive ("0/1 * * * *", "SQLScanner")
 -- {"tag":"WSAdminReq","contents":["FaasActive",["0/1 * * * *","SQLScanner"]]}
 -- {"tag":"WSAdminReq","contents":["FaasKill",["0/1 * * * *","SQLScanner"]]}
+
+mainRepl :: IO ()
+mainRepl = do
+  let r = #a =: "aaa" :& #b =: "bbb" :& V.RNil
+      j = DN.recToJSON r
+
+  putStrLn (show j)
+  putStrLn "finish"

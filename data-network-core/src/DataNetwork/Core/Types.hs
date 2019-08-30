@@ -1,11 +1,9 @@
 module DataNetwork.Core.Types
   (
-    module DataNetwork.Core.Types.Common
-  , module DataNetwork.Core.Types.RPC
-  , module DataNetwork.Core.Types.Faas
+    module X
   ) where
 
-import DataNetwork.Core.Types.Common
-import DataNetwork.Core.Types.RPC
-import DataNetwork.Core.Types.Faas
+import DataNetwork.Core.Types.Common as X
+import DataNetwork.Core.Types.RPC as X
+import DataNetwork.Core.Types.Faas as X
 
