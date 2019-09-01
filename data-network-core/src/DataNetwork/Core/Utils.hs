@@ -67,7 +67,7 @@ instance (KnownSymbol s, J.FromJSON a, J.FromJSON (V.FieldRec rs))
 
 utilsRepl :: IO ()
 utilsRepl = do
-  let a = J.toJSON (#a =: "ccc" :& #b =: "ddd" :& V.RNil)
-      b = J.fromJSON a :: J.Result (V.FieldRec ["a" ::: T.Text, "b" ::: T.Text])
+  let a = J.toJSON (#a =: "ccc" :& #b =: (#c =: "nest" :& V.RNil) :& V.RNil)
+      b = J.fromJSON a :: J.Result (V.FieldRec '["a" ::: T.Text, "b" ::: (V.FieldRec '["c" ::: T.Text])])
   print a
   print b
