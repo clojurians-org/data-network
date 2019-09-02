@@ -74,6 +74,18 @@ project ./. ({ pkgs, hackGet, ... }: {
       librarySystemDepends = [ pkgs.odpic ] ;
       pkgconfigDepends = [ pkgs.odpic ] ;
     }) ;
+    vinyl = with pkgs.haskell.lib; overrideCabal (
+        self.callCabal2nix "vinyl" (pkgs.fetchFromGitHub {
+            owner = "VinylRecords" ;
+            repo = "Vinyl" ;
+            rev = "81d6e33f86e5bc621b89e30caad8a76b23742ef4" ;
+            sha256 = "1ynjv2lsz30pvl9ki9fb5yprb5p7wwvs7g6sfj03s0ra171m0grn" ;
+        }) {}
+      ) (drv : {
+          doCheck = false ;
+          jailbreak = true ;
+      }) ;
+
     # reflex-dom-contrib = pkgs.haskell.lib.doJailbreak super.reflex-dom-contrib;
   } ;
 })
