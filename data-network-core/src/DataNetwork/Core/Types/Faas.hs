@@ -4,7 +4,7 @@
 
 module DataNetwork.Core.Types.Faas where
 
-import qualified DataNetwork.Core.Types.Common as DN
+import qualified DataNetwork.Core.Types.Common as DC
 import Prelude
 import GHC.Generics (Generic)
 import GHC.Int (Int64)
@@ -20,12 +20,15 @@ import Labels.JSON ()
 
 import qualified Data.Aeson as J
 
+import Data.Vinyl ((:::), (=:), Rec ((:&)))
+import qualified Data.Vinyl as V
+
 
 type SQLScannerLabel =
   ( "name" := T.Text
   , "desc" := T.Text
-  , "cron" := DN.CronExpr
-  , "sql_connect" := DN.SQLConnect
+  , "cron" := DC.CronExpr
+  , "sql_connect" := DC.SQLConnect
   , "sql" := T.Text
   , "increment_field" := T.Text
   , "xid" := Maybe Int64 )
@@ -45,13 +48,13 @@ instance Default SQLScanner where
                    , #increment_field := ""
                    , #xid := Nothing )
 
-instance DN.HasLabel SQLScanner where
+instance DC.HasLabel SQLScanner where
   type instance Label SQLScanner = SQLScannerLabel
   label (SQLScanner r) = r
   
 
-type ScannerItem = ( "offset" := T.Text, "task_name" := T.Text, "task_event" := T.Text, "ts" := POSIXTime )
-type ScannerSchedule = ( "offset" := T.Text, "ts" := POSIXTime )
+type ScannerItem = V.FieldRec '["row" ::: J.Value, "ts" ::: POSIXTime]
+type ScannerSchedule = V.FieldRec '[ "offset" ::: T.Text, "ts" ::: POSIXTime ]
 data SQLScannerNotifyEvent = ScannerItemsEvent [ScannerItem]
                            | ScannerScheduleEnterEvent ScannerSchedule
                            | ScannerScheduleLeaveEvent ScannerSchedule
@@ -64,5 +67,4 @@ parseJScannerItems json =
   case J.fromJSON json of
     J.Success (ScannerItemsEvent r) -> Just r
     _ -> Nothing
-    
-                        
+

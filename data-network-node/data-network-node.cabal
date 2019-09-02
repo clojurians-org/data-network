@@ -17,9 +17,11 @@ maintainer:          larluo@clojurians.org
 build-type:          Simple
 extra-source-files:  CHANGELOG.md
 
-library data-network-node-lib
-  -- exposed-modules:
-  -- other-modules:
+library
+  exposed-modules:
+      DataNetwork.Node
+  other-modules:
+      DataNetwork.Node.WebSocketServer
   -- other-extensions:
   build-depends:       
       base
@@ -33,18 +35,23 @@ library data-network-node-lib
     , heredoc
     , string-conversions
     , unordered-containers
-    , aeson
-    , labels
-    , labels-json
-    , vinyl
-    , vinyl-generics
-    , lens
+    , time
+
     , mtl
     , stm
     , async
-    , time
-    , cron
+    , unliftio
+    , transformers-base
+    , monad-control
+    , lifted-base
+    , lifted-async
 
+    , aeson
+    , vinyl
+    , vinyl-generics
+    , lens
+
+    , cron
     , snap-core
     , snap-server
     , snap
@@ -59,20 +66,33 @@ library data-network-node-lib
     , minio-hs
     , hlibssh2
 
-    , unliftio
-    , monad-control
-    , lifted-base
-    , lifted-async
 
   hs-source-dirs:      src
   default-language:    Haskell2010
 
-executable data-network-node
+executable data-network-node-bin
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
   build-depends:       
       base
+    , lens
+    , data-network-core
+    , data-network-node
 
-  hs-source-dirs:      src
+    , heredoc
+    , text-show
+    , unordered-containers
+    , mtl
+    , resourcet
+
+    , lifted-base 
+    , lifted-async
+    , snap-core
+    , snap-server
+    , websockets-snap
+    , snap
+    , vinyl
+
+  hs-source-dirs:      app
   default-language:    Haskell2010

@@ -1,3 +1,3 @@
 ((haskell-mode . (
-  (dante-target . "data-network-node-lib")
+  (dante-target . "data-network-node")
   )))
