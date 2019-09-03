@@ -21,6 +21,10 @@ import Data.String.Conversions (cs)
 import Control.Lens
 import Data.Aeson.Lens as J
 
+import qualified UnliftIO as U
+import qualified Control.Concurrent.STM.TBMChan as STM
+import qualified Data.Conduit.TMChan as CC
+
 tshow :: (Show a) => a -> T.Text
 tshow = cs . show
 
@@ -31,3 +35,6 @@ bracketR alloc free inside = do
   res <- inside seed
   R.release key
   return res
+
+mkChan :: (R.MonadResource m) => Int -> m (R.ReleaseKey, CC.TBMChan a)
+mkChan n = R.allocate (STM.newTBMChanIO n) (U.atomically . STM.closeTBMChan)

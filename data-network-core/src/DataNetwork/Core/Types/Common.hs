@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GADTs #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveGeneric, ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module DataNetwork.Core.Types.Common where
 
@@ -26,15 +27,32 @@ import Data.Aeson.Lens as J
 import Data.Proxy (Proxy(..))
 import GHC.TypeLits (KnownSymbol, symbolVal)
 
+import Control.Monad.Trans (lift)
+
 import qualified Data.Vinyl as V
 import Data.Vinyl ((:::), (=:), Rec((:&)))
 import Data.Vinyl.Functor ((:.))
 import qualified Data.Vinyl.Class.Method as V
 import qualified Data.Vinyl.Functor as V
 
+import Control.Monad.Base (MonadBase, liftBase)
+import Control.Monad.Trans.Control (MonadBaseControl(..))
+import qualified Control.Monad.Trans.Resource as R
+
+
 instance Default Bool where def = True
 instance Default T.Text where def = T.empty
 instance Default (M.HashMap k v) where def = M.empty
+
+instance MonadBase b m => MonadBase b (R.ResourceT m) where
+    liftBase = lift . liftBase
+
+instance MonadBaseControl b m => MonadBaseControl b (R.ResourceT m) where
+  type StM (R.ResourceT m) a = StM m a
+  liftBaseWith f = R.withInternalState $ \reader' ->
+    liftBaseWith $ \runInBase ->
+      f $ runInBase . (\t -> R.runInternalState t reader')
+  restoreM base = R.withInternalState $ const $ restoreM base
 
 instance J.ToJSON a => J.ToJSON (V.ElField '(s, a)) where
   toJSON x = J.object [(cs (V.getLabel x), J.toJSON (V.getField x))]

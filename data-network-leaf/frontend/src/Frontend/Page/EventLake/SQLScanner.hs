@@ -18,12 +18,19 @@ import Frontend.Class
 import Prelude
 import Reflex.Dom.Core
 
+import Data.String.Conversions (cs)
+import qualified Data.Aeson as J
+import qualified Data.Aeson.Lens as J
 import qualified TextShow as T
 import qualified Labels as L
 import Control.Lens
 
+
 import Data.Functor ((<&>))
 import Control.Monad.Fix (MonadFix)
+
+import Data.Vinyl ((:::), (=:), Rec ((:&)))
+import qualified Data.Vinyl as V
 
 trSQLScanner :: forall t m. (DomBuilder t m, PostBuild t m)
   => Dynamic t DN.SQLScanner -> m ()
@@ -32,15 +39,15 @@ trSQLScanner scannerD = do
   tdDynInput (scannerD <&> L.get #desc . DN.label )
   tdDynInput (scannerD <&> tshow . L.get #cron . DN.label )
   tdDynInput (constDyn "")
+  tdDynInput (scannerD <&> L.get #name . DN.label )  
   return ()
 
 trSQLScannerItem :: forall t m. (DomBuilder t m, PostBuild t m)
   => Dynamic t DN.ScannerItem -> m ()
 trSQLScannerItem scannerItemD = do
-  el "td" $ dynText (scannerItemD <&> L.get #offset)
-  el "td" $ dynText (scannerItemD <&> L.get #task_name)
-  el "td" $ dynText (scannerItemD <&> L.get #task_event)
-  el "td" $ dynText (scannerItemD <&> iso8601TimeFormat . L.get #ts)
+  el "td" $ dynText (scannerItemD <&> (^. V.rlensf #row . J.key "OFFSET" . to tshow))
+  el "td" $ dynText (scannerItemD <&> (^. V.rlensf #row . to (cs . J.encode)))  
+  el "td" $ dynText (scannerItemD <&> (^. V.rlensf #ts . to iso8601TimeFormat))
   return ()
   
 eventLake_sqlScanner
@@ -62,7 +69,7 @@ eventLake_sqlScanner = do
 
   divClass "ui segment basic" $ do
     scannerE <- elClass "table" "ui selectable table" $ do
-      theadList ["名称", "描述", "Cron表达式", "最近一次扫描时间", "操作"]
+      theadList ["名称", "描述", "Cron表达式", "最近一次扫描时间", "事件脉冲", "操作"]
       e0 <- (trEB $ createIcon >> trSQLScanner (constDyn (def :: DN.SQLScanner)) )
               <&> tagPromptlyDyn (return def)
       e1 <- fmap (switchDyn . fmap leftmost) . simpleList scannersD $ \v -> do
@@ -104,7 +111,7 @@ eventLake_sqlScanner = do
     [ scannerItemsE <&> \xs' xs -> xs' <>  xs ]
   divClass "ui segment basic" $ do
     elClass "table" "ui selectable table" $ do
-    el "thead" $ el "tr" $ trHeadList ["偏移量", "任务名称", "事件类型", "扫描时点"]
+    el "thead" $ el "tr" $ trHeadList ["偏移量", "扫描数据", "扫描时点"]
     simpleList scannerItemsD $ \scannerItem ->
       el "tr" (trSQLScannerItem scannerItem)
   return ()

@@ -54,6 +54,7 @@ library
     , transformers
     , mtl
     , unliftio
+    , transformers-base
     , monad-control
     , lifted-base
     , lifted-async

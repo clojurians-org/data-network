@@ -22,6 +22,7 @@ library
     , heredoc
     , template-haskell
     , aeson
+    , aeson-qq
     , labels
     , labels-json
     , transformers
@@ -33,7 +34,12 @@ library
     , hasql
     , stm-chans
     , stm-conduit
+
     , unliftio
+    , monad-control
+    , lifted-base
+    , lifted-async
+
     , snap-core
     , snap-server
     , snap
@@ -43,7 +49,6 @@ library
     , regex-tdfa
     , minio-hs
     , hlibssh2
-    , odpic-raw
 
   exposed-modules:
     Backend

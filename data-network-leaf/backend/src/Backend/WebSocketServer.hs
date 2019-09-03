@@ -1,7 +1,9 @@
-{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE NoImplicitPrelude, OverloadedStrings #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 
 --module Backend.WebSocketServer (serveWebSocket) where
 module Backend.WebSocketServer where
@@ -16,13 +18,14 @@ import Common.ExampleData
 
 import Prelude
 import Text.Heredoc (str)
+import qualified TextShow as T
 
-import Control.Monad (forever, void)
+import Control.Monad (forever, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Either.Combinators (mapLeft, maybeToLeft, maybeToRight)
 import System.Random (randomRIO)
 
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust, fromJust)
 import Data.Functor ((<&>))
 
 import Control.Exception (bracket, finally)
@@ -40,16 +43,16 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.Combinators as C
 import Data.Conduit.TMChan ((>=<))
 import qualified Data.Conduit.TMChan as CC
-import qualified Control.Concurrent.STM.TBMChan as Chan
+import qualified Control.Concurrent.STM.TBMChan as STM
 import qualified Language.Haskell.Interpreter as I
 
 import Control.Concurrent (MVar, newMVar, modifyMVar, modifyMVar_, readMVar, threadDelay)
 import Snap.Core (MonadSnap)
 import Network.WebSockets.Snap (runWebSocketsSnap)
 
-import Control.Lens ((^.), (.~), view, over, at)
+import Control.Lens
 import Control.Applicative ((<|>))
-import Labels 
+import qualified Labels as L
 
 import Control.Monad.Except (runExceptT, liftEither)
 import Control.Monad.Trans (lift)
@@ -69,44 +72,76 @@ import Network.SSH.Client.LibSSH2.Foreign
   , usernamePasswordAuth, sftpInit, sftpShutdown
   , sftpOpenFile, sftpCloseHandle, sftpWriteFileFromBS)
 
-import qualified Database.Dpi as Oracle
-
 import qualified UnliftIO as U
 import qualified Control.Monad.Trans.Resource as R
 
+import qualified Data.Vinyl as V
+import qualified Data.HashMap.Lazy as M
+import qualified Data.HashMap.Strict as MS
+import Data.Aeson.QQ (aesonQQ)
+import qualified Control.Concurrent.Async.Lifted as L
+import Control.Monad.Trans.Control (MonadBaseControl)
 
 serveWebSocket :: MonadSnap m => MVar AppST ->  m ()
 serveWebSocket appST = runWebSocketsSnap (wsConduitApp appST)
 
-{--
-  faas <- U.readMVar appST  
-  let getter = lens #dataNetwork . lens #eventPulses . at name
+subJSON :: J.Value -> J.Value -> Bool
+subJSON (J.Object m1) (J.Object m2) = do
+  and . flip fmap (MS.toList m1) $ \(k1, v1) -> do
+    case MS.lookup k1 m2 of
+      Just v2 -> subJSON v1 v2
+      Nothing -> False
+subJSON (J.String s) (J.Number x) = s == (cs $ show x)
+subJSON v1 v2 = (v1 == v2)
 
-  let eventPulseMaybe = view getter faas
-  evalResult <- runExceptT $ do
-    eventPulse <- liftEither $ (maybeToRight "EventPulse_Not_Found" eventPulseMaybe)
-    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
-    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
-  (return . EventPulseARES . mapLeft show) evalResult
+subJSONs :: J.Value -> [J.Value] -> Bool
+subJSONs x xs = all (subJSON x) xs
 
---}
-activeEP :: R.MonadUnliftIO m => MVar AppST -> T.Text -> m (Either String ())
-activeEP appStM name = do
-  faas <- U.readMVar appStM
-  let getter = lens #dataNetwork . lens #eventPulses . at name
+runDataCircuit :: (MonadIO m)
+  => STM.TBMChan B.ByteString -> MVar AppST -> (T.Text, DataCircuitValue) -> m ()
+runDataCircuit brokerChan appStmv (eventPulseName, dciv) = do
+  faas <- U.readMVar appStmv
+  let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas dciv
+  liftIO $ T.printT haskellCode
+  liftIO $ I.runInterpreter . dynHaskell $ haskellCode
+  return ()
+
+activeEP :: (R.MonadUnliftIO m, MonadBaseControl IO m)
+  => STM.TBMChan B.ByteString -> MVar AppST -> T.Text -> [J.Value] -> m ()
+activeEP brokerChan appStmv name payload = do
+  faas <- U.readMVar appStmv
+  let getter = L.lens #dataNetwork . L.lens #eventPulses . at name
       eventPulseMaybe = view getter faas
-  runExceptT $ do
-    eventPulse <- liftEither $ (maybeToRight "EventPulse_Not_Found" eventPulseMaybe)
-    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
-    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
-  
+  when (isJust eventPulseMaybe) $ do
+    eventPulse <- fromJust undefined eventPulseMaybe
 
-rpcHandle :: (R.MonadResource m, R.MonadUnliftIO m) => MVar AppST -> DN.RPCResponse -> m ()
-rpcHandle appStM (DN.FaasNotifyPush (DN.FaasKey xtype name, "ScannerItemsEvent", payload)) = do
---  let scannerItemsEvent = J.fromJSON payload :: J.Result DN.SQLScannerNotifyEvent
+    C.runConduit $ C.yieldMany (epDataCircuitValues eventPulse)
+                .| C.concatMap (guardPayload payload)
+                .| C.mapM (L.async . runDataCircuit brokerChan appStmv . (,) name)
+                .| C.sinkNull
+--                .| CC.sinkTBMChan brokerChan
+--    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
+--    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
+  where
+    guardPayload :: [J.Value] -> DataCircuitValue -> Maybe DataCircuitValue
+    guardPayload payload dciv = do
+      case subJSONs (J.toJSON . dcivGuard $ dciv) payload of
+        True -> Just dciv
+        False -> Nothing
+
+
+rpcHandle :: (R.MonadResource m, R.MonadUnliftIO m, MonadBaseControl IO m) 
+  => STM.TBMChan B.ByteString -> MVar AppST -> DN.RPCResponse -> m ()
+rpcHandle brokerChan appStM (DN.FaasNotifyPush (DN.FaasKey "SQLScanner" name, "ScannerItemsEvent", payloadJV)) = do
+  
+  let scannerItemsEvent = J.fromJSON payloadJV :: J.Result DN.SQLScannerNotifyEvent
+  case J.fromJSON payloadJV of
+    J.Success (DN.ScannerItemsEvent items) -> do
+      activeEP brokerChan appStM ("EP-" <> name) (items ^.. each . V.rlensf #row)
+    _ -> fail "rpcHandle: SQLScannerNotifyEvent-PARSE ERROR!"
 --  void $ activeEP appStM name
   return ()
-rpcHandle _ _ = return ()
+rpcHandle _ _ _ = return ()
 
 wsConduitApp :: MVar AppST -> WS.ServerApp
 wsConduitApp appST pending= do
@@ -128,11 +163,11 @@ wsConduitApp appST pending= do
               >=< ( rpcSource
                  .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
                  .| C.concatMap J.decode
-                 .| C.iterM (rpcHandle appST)
+                 .| C.iterM (rpcHandle outChan appST)
                  .| C.map (J.encode . NodeRPCRes)
                  )
 
-    U.concurrently_
+    L.concurrently_
       (C.runConduit
         $ uiSource
        .| C.iterM (liftIO . putStrLn . ("receive mesage:" <>) . cs)
@@ -140,7 +175,7 @@ wsConduitApp appST pending= do
        .| (C.getZipConduit
              $ C.ZipConduit ( C.concatMap fromLeafRPCReq
 --                           .| C.iterM (liftIO . putStrLn . ("leaf-req:" <>) . cs . show)
-                           .| C.mapM (wsHandle appST)
+                           .| C.mapM (wsHandle outChan appST)
                            .| C.map (J.encode @WSResponseMessage)
 --                           .| C.iterM (liftIO . putStrLn . ("leaf-res:" <>) . cs)
                            .| chanSink
@@ -157,39 +192,35 @@ wsConduitApp appST pending= do
       (C.runConduit $ joinSource .| uiSink))
     `U.catch` \(U.SomeException e) -> putStrLn (show e)
 
-  putStrLn "ui-ws connection finished ..."        
+  putStrLn "ui-ws connection finished ..."
   where
     mkChan :: (R.MonadResource m) =>Int -> m (R.ReleaseKey, CC.TBMChan a)
-    mkChan n = R.allocate (Chan.newTBMChanIO n) (U.atomically . Chan.closeTBMChan)
+    mkChan n = R.allocate (STM.newTBMChanIO n) (U.atomically . STM.closeTBMChan)
 
-wsHandle :: (MonadIO m, R.MonadUnliftIO m) => MVar AppST -> WSRequestMessage -> m WSResponseMessage
+wsHandle :: (MonadIO m, R.MonadUnliftIO m, MonadBaseControl IO m)
+  => STM.TBMChan B.ByteString -> MVar AppST -> WSRequestMessage -> m WSResponseMessage
 
-wsHandle appST AppInitREQ = do
+wsHandle _ appST AppInitREQ = do
   -- U.readMVar appST >>= liftIO . putStrLn . ("INIT REQ" ++ ) . show
   return . AppInitRES =<< U.readMVar appST
-wsHandle appST (HaskellCodeRunRequest r) =
+wsHandle _ appST (HaskellCodeRunRequest r) =
   return . HaskellCodeRunResponse . mapLeft show =<< 
     (liftIO . I.runInterpreter . dynHaskell) r
-wsHandle appST (EventPulseAREQ name) = do
+wsHandle brokerChan appST (EventPulseAREQ name) = do
 --  faas <- U.readMVar appST  
-  evalResult <- activeEP  appST name
-  (return . EventPulseARES . mapLeft show) evalResult
-wsHandle appST (DSOSQLCursorDatabaseRREQ cr "Oracle" database) = do
+  activeEP brokerChan appST name [J.Null]
+  return . EventPulseARES $ Right ()
+wsHandle _ appST (DSOSQLCursorDatabaseRREQ cr "Oracle" database) = do
   liftIO $ putStrLn (show cr <> "-" <> cs database)
   r <- DSOSQLCursorDatabaseRRES . Right . take 100 <$> oracleShowTables cr database
   liftIO $ putStrLn (show r)
   return r
-  {--
-  DSOSQLCursorDatabaseRRES . Right <$> return [ (#schema := "larluo", #table :="haskell")
-                                              , (#schema := "larluo", #table := "clojure")]
-  --}
 
-
-wsHandle appST (DSOSQLCursorTableRREQ cr "Oracle" database (schema, table) ) = do
+wsHandle _ appST (DSOSQLCursorTableRREQ cr "Oracle" database (schema, table) ) = do
   DSOSQLCursorTableRRES . Right <$> oracleDescribeTable cr database (schema, table)
 
 
-wsHandle appST (DSEFSSFtpDirectoryRREQ
+wsHandle _ appST (DSEFSSFtpDirectoryRREQ
                   (DN.Credential hostName hostPort username password)
                   path) = liftIO $ do
   bracket (sessionInit (cs hostName) hostPort) sessionClose $ \s -> do
@@ -224,8 +255,8 @@ dynHaskell stmt = do
                                    , I.QuasiQuotes]]
   I.runStmt (cs stmt)
 
-replRun :: IO ()
-replRun = do
+wsRepl :: IO ()
+wsRepl = do
   {--
   let code = toHaskellCode . toHaskellCodeBuilder exampleFaasCenter $ (head exampleEventPulses)
   T.putStrLn code
@@ -237,4 +268,4 @@ replRun = do
          ("SCHNEW", "SCH_CURR_JOB")
   -- SCH_CURR_JOBSTATE
   -- SCH_CURR_JOB
-  mapM_ print b
+  mapM_ (T.printT . show)  b

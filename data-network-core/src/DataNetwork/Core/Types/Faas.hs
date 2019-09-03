@@ -54,7 +54,7 @@ instance DC.HasLabel SQLScanner where
   
 
 type ScannerItem = V.FieldRec '["row" ::: J.Value, "ts" ::: POSIXTime]
-type ScannerSchedule = V.FieldRec '[ "offset" ::: T.Text, "ts" ::: POSIXTime ]
+type ScannerSchedule = V.FieldRec '[ "offset" ::: Maybe J.Value, "ts" ::: POSIXTime ]
 data SQLScannerNotifyEvent = ScannerItemsEvent [ScannerItem]
                            | ScannerScheduleEnterEvent ScannerSchedule
                            | ScannerScheduleLeaveEvent ScannerSchedule

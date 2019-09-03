@@ -18,6 +18,8 @@ library
 
                , text-show
                , text-show-instances
+               , lens
+               , lens-aeson
   exposed-modules:
     Frontend
   ghc-options: -Wall

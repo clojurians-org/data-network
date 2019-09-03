@@ -23,6 +23,8 @@ import qualified Labels as L
 import Data.Maybe (fromJust)
 import qualified Data.HashMap.Lazy as M
 
+import qualified Data.Aeson as J
+
 exampleFaasCenter :: FaaSCenter
 exampleFaasCenter =
   ( #dataNetwork := ( #eventPulses :=
@@ -49,7 +51,7 @@ exampleFaasCenter =
 exampleSQLScanners :: [DN.SQLScanner]
 exampleSQLScanners =
   [ DN.SQLScanner
-      ( #name := "dw-schedule"
+      ( #name := "dw_schedule"
       , #desc := "数仓调度系统扫描"
       , #cron := DN.CronExpr "0/1 * * * *"
       , #sql_connect := DN.SQLConnect
@@ -128,13 +130,14 @@ exampleDataServices =
 
 exampleEventPulses :: [EventPulse]
 exampleEventPulses = do
-  [ def { epName = "EP_DWJobNotify"
+  [ def { epName = "EP-dw_schedule"
         , epDesc = "数仓作业通知"
         , epDataCircuitValues = exampleDataCircuitValues }
     ]
 exampleDataCircuitValues :: [DataCircuitValue]
 exampleDataCircuitValues = do
-  [ def { dcivName = "DCV_HRFilePush"
+  [ def { dcivGuard = M.singleton "job_name" (J.String "PR_TM_NCMS_LOAN_CONT_INFO")
+        , dcivName = "DCV_HRFilePush"
         , dcivDesc = "华瑞银行数据下传平台"
         , dcivLinkedDataCircuit = (3, "文件下传平台")
         , dcivLinkedDataSandbox = def

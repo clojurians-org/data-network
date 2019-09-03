@@ -20,7 +20,8 @@ import qualified Data.HashMap.Lazy as M
 
 import Data.Time.Clock.POSIX (getPOSIXTime)
 
-import Control.Monad (forever)
+import Data.Maybe (isJust)
+import Control.Monad (forever, when)
 import Control.Monad.Trans (MonadIO(liftIO), MonadTrans(lift))
 import Control.Monad.Base (MonadBase, liftBase)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
@@ -38,36 +39,22 @@ import qualified Data.Conduit.TMChan as CC
 
 import qualified Network.WebSockets as WS
 import qualified System.Cron as Cron
-
+ 
 import Data.Vinyl ((:::), (=:), Rec ((:&)))
 import qualified Data.Vinyl as V
 import Control.Concurrent (ThreadId, killThread)
 
-instance MonadBase b m => MonadBase b (R.ResourceT m) where
-    liftBase = lift . liftBase
-
-instance MonadBaseControl b m => MonadBaseControl b (R.ResourceT m) where
-  type StM (R.ResourceT m) a = StM m a
-  liftBaseWith f = R.withInternalState $ \reader' ->
-    liftBaseWith $ \runInBase ->
-      f $ runInBase . (\t -> R.runInternalState t reader')    
-  restoreM base = R.withInternalState $ const $ restoreM base
-  
 type WebSocketState = M.HashMap DC.FaasKey (V.FieldRec '[ "tid" ::: ThreadId
-                                                         , "id" ::: DC.FaasKey
-                                                         , "status" ::: DC.FaasStatus
-                                                         , "run" ::: M.HashMap T.Text J.Value ])
+                                                        , "id" ::: DC.FaasKey
+                                                        , "status" ::: DC.FaasStatus
+                                                        , "run" ::: M.HashMap T.Text J.Value ])
 defWebSocketState = M.empty
 
-mkChan :: (R.MonadResource m) => Int -> m (R.ReleaseKey, CC.TBMChan a)
-mkChan n = R.allocate (STM.newTBMChanIO n) (U.atomically . STM.closeTBMChan)
-
-serve :: L.MVar WebSocketState -> WS.ServerApp
-serve mv pending = R.runResourceT $ do
+serve :: CC.TBMChan B.ByteString -> L.MVar WebSocketState -> WS.ServerApp
+serve brokerChan mv pending = R.runResourceT $ do
   conn <- liftIO $ WS.acceptRequest pending
   liftIO $ T.printT "websocket connection accepted.."
   
-  (reg, brokerChan) <- mkChan 1000
   let leafSource = forever $ liftIO (WS.receiveData @B.ByteString conn) >>= C.yield
       leafSink = C.awaitForever $ liftIO . WS.sendTextData @B.ByteString conn
   U.concurrently_
@@ -101,7 +88,7 @@ handleRequest brokerChan stmv (DC.FaasKillReq key) = do
 
 handleRequest _ _ _ = undefined
 
-activeSQLScanner :: (MonadIO m, MonadBase IO m, R.MonadUnliftIO m) => CC.TBMChan B.ByteString -> L.MVar WebSocketState -> DC.FaasKey -> m ()
+activeSQLScanner :: (MonadIO m, MonadBaseControl IO m, R.MonadUnliftIO m) => CC.TBMChan B.ByteString -> L.MVar WebSocketState -> DC.FaasKey -> m ()
 activeSQLScanner brokerChan stmv key@(DC.FaasKey _ name) = do
   let 
     sql = [str| SELECT t2.RUN_END_DATE as OFFSET
@@ -113,27 +100,32 @@ activeSQLScanner brokerChan stmv key@(DC.FaasKey _ name) = do
               |]
 --  liftIO $ 
   st <- L.readMVar stmv
+
+  let offsetSave = st ^? ix key . V.rlensf #run . ix "offset"
   liftIO $ putStrLn ("activeSQLScanner:" <> cs name)
   tsEnter <- liftIO $ getPOSIXTime
 
   sinkEvent $  DC.FaasNotifyPush
     ( key, "ScannerScheduleEnterEvent"
-    , J.toJSON $ DC.ScannerScheduleEnterEvent (#offset =: "3" :& #ts =: tsEnter :& V.RNil) )
+    , J.toJSON $ DC.ScannerScheduleEnterEvent (#offset =: offsetSave :& #ts =: tsEnter :& V.RNil) )
 
-  (rs, mv') <- DC.aboveOracleOffset (Just J.Null) (DC.Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql
-  {--
-  U.atomically $ Chan.writeTBMChan outChan $ J.encode $
-    DN.FaasNotifyPush ( key, "ScannerItemsEvent"
-                      , J.toJSON . DN.ScannerItemsEvent $
-                          [ ( #offset := "1", #task_name := "LARLUO", #task_event := "START", #ts := ts )
-                          , ( #offset := "3", #task_name := "LARLUO2", #task_event := "START", #ts := ts ) ])
-  --}
+  (rs, offset) <- DC.aboveOracleOffset offsetSave (DC.Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql
+
+
+  when (isJust  offsetSave) $
+    sinkEvent $ DC.FaasNotifyPush
+      ( key, "ScannerItemsEvent"
+      , J.toJSON $ DC.ScannerItemsEvent (attachTs tsEnter rs))
 
   tsLeave <- liftIO $ getPOSIXTime    
   sinkEvent $ DC.FaasNotifyPush
     ( key, "ScannerScheduleLeaveEvent"
-    , J.toJSON $ DC.ScannerScheduleLeaveEvent ( #offset =: "3" :& #ts =: tsLeave :& V.RNil) )
-  where sinkEvent = U.atomically . STM.writeTBMChan brokerChan . J.encode
+    , J.toJSON $ DC.ScannerScheduleLeaveEvent ( #offset =: Just offset :& #ts =: tsLeave :& V.RNil) )
+
+  L.modifyMVar_ stmv $ return . set (ix key . V.rlensf #run . at "offset") (Just offset)
+  where
+    sinkEvent = U.atomically . STM.writeTBMChan brokerChan . J.encode
+    attachTs ts = fmap (\r -> #row =: r :& #ts =: ts :& V.RNil) 
 
 wsRepl :: IO ()
 wsRepl = do

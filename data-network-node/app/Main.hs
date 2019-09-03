@@ -14,6 +14,8 @@ import qualified DataNetwork.Node as Lib
 import Prelude
 import Control.Lens
 
+import qualified Data.ByteString.Lazy as B
+import qualified Data.Conduit.TMChan as CC
 import qualified TextShow as T
 
 import Text.Heredoc (str)
@@ -36,16 +38,18 @@ makeLenses ''App
 
 main :: IO ()
 main = R.runResourceT $ do
+  (reg, brokerChan) <- DC.mkChan 1000
   appStmv <- L.newMVar Lib.defWebSocketState
   liftIO $ do
     SS.serveSnaplet (S.defaultConfig & S.setPort 1111) $
-      app appStmv
+      app brokerChan appStmv
+  R.release reg
   liftIO $ putStrLn "finished!"
   
-app :: L.MVar Lib.WebSocketState -> SS.SnapletInit App App
-app stmv = SS.makeSnaplet "data-network-node"
+app :: CC.TBMChan B.ByteString -> L.MVar Lib.WebSocketState -> SS.SnapletInit App App
+app brokerChan stmv = SS.makeSnaplet "data-network-node"
                           "p2p distributed fn server"
                            Nothing $ do
-  SS.addRoutes [("ws", S.runWebSocketsSnap $ Lib.serve stmv)]
+  SS.addRoutes [("ws", S.runWebSocketsSnap $ Lib.serve brokerChan stmv)]
   return App
 

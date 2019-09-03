@@ -21,7 +21,6 @@ import Data.Default (Default(def))
 import Control.Applicative (liftA2)
 import Control.Lens ()
 
-
 data EventPulse = EventPulse {
     epEnable :: Bool
   , epName :: T.Text
@@ -34,6 +33,7 @@ instance Default EventPulse
 
 data DataCircuitValue = DataCircuitValue {
     dcivEnable :: Bool
+  , dcivGuard :: M.HashMap T.Text J.Value
   , dcivName :: T.Text
   , dcivDesc :: T.Text
   , dcivLinkedDataCircuit :: (Int64, T.Text)  

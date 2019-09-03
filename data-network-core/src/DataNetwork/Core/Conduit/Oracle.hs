@@ -140,7 +140,7 @@ oracleShowTables credential database =
   C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
-    sql = [str| select owner as schema, table_name as table
+    sql = [str| select owner as "schema", table_name as "table"
               | from all_tables
               | where tablespace_name not in ('SYSTEM', 'SYSAUX')
               |]
@@ -151,8 +151,8 @@ oracleDescribeTable credential database (schema, table) = do
   C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
-    sql =    "select t1.column_name as name, t1.data_type as type, t2.comments as desc \n"
-          <> "  from all_tab_columns t1 inner join all_col_comments t2 \n"
+    sql =    " select t1.column_name as \"name\", t1.data_type as \"type\", t2.comments as \"desc\" \n"
+          <> " from all_tab_columns t1 inner join all_col_comments t2 \n"
           <> "    on t1.owner = t2.owner and t1.table_name = t2.table_name and t1.column_name = t2.column_name\n"
           <> " where t1.owner = '" <> schema <> "' AND t1.table_name = '" <> table <> "'\n"
 
@@ -167,7 +167,7 @@ maxOracleOffset credential database sql = do
     sql' = [qc| SELECT MAX(offset) AS MAX_OFFSET FROM ( { sql } ) t |]
 
 aboveOracleOffset :: forall m. (MonadIO m, U.MonadUnliftIO m)
-  => Maybe J.Value -> Credential -> T.Text -> T.Text -> m ([J.Value], Maybe J.Value)
+  => Maybe J.Value -> Credential -> T.Text -> T.Text -> m ([J.Value], J.Value)
 aboveOracleOffset offsetMv credential database sql = do
   offset <- maybe (maxOracleOffset credential database sql) return offsetMv
 --  liftIO $ printT (mkSQL offset)
@@ -175,7 +175,7 @@ aboveOracleOffset offsetMv credential database sql = do
      $ (lift (chan offset) >>= sourceTBMChan) .| C.concatMap id
     .| C.getZipConduit ((,) <$> C.ZipConduit C.sinkList
                             <*> C.ZipConduit ( C.concatMap (^? J.key "OFFSET")
-                                            .| fmap Just (C.foldl maxOffset J.Null)))
+                                            .| C.foldl maxOffset J.Null))
 
   --undefined             
   where
@@ -194,10 +194,16 @@ aboveOracleOffset offsetMv credential database sql = do
 
 oracleRepl :: IO ()
 oracleRepl = do
+--  a <- oracleShowTables (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB"
+--  print a
+  b <- oracleDescribeTable (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB" ("SCHNEW", "SCH_CURR_JOB")
+  print b
+  {--
   (rs, mv') <- aboveOracleOffset (Just J.Null) (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql
   printT . show $ mv'
   --forM_ rs (printT . show)
-  printT "finished"  
+  printT "finished"
+  --}
   where
     sql = [str| SELECT t2.RUN_END_DATE as OFFSET
               |      , t1.JOB_NAME
