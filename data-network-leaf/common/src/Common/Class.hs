@@ -26,6 +26,40 @@ import Labels (lens)
 import Control.Lens (view, (^.), (^..), (.~), at, _Just, each, to)
 import qualified Data.List.NonEmpty as NE
 
+import qualified Language.Haskell.TH as TH
+
+class ToQ a where
+  toExp :: FaaSCenter -> a -> TH.Q TH.Exp
+
+classRepl :: IO ()
+classRepl = do
+  let sftp = def :: DSEFSSFtp
+      q = toExp undefined sftp
+  a <- TH.runQ q 
+  print $ TH.pprint a
+  
+  
+instance ToQ DSEFSSFtp where
+  toExp _ dsefsSFtp = [| do
+      let (hostname, port, username, password) = ("10.132.37.201", 22, "op", "op")
+          filepath = "larluo111.txt"
+      println "hello"
+      hostname
+    |]
+  {--
+  toExp _ dsefsSFtp = [|
+     let (hostname, port, username, password) = ("10.132.37.201", 22, "op", "op")
+         filepath = "larluo111.txt"
+         flags = [SSH.FXF_WRITE, SSH.FXF_CREAT, SSH.FXF_TRUNC, SSH.FXF_EXCL]
+       bracketP (SSH.sessionInit hostname port) SSH.sessionClose $ \s -> do
+         liftIO $ SSH.usernamePasswordAuth s username password
+         bracketP (SSH.sftpInit s) SSH.sftpShutdown $ \sftp -> do
+         bracketP (SSH.sftpOpenFile sftp filepath 0o777 flags) SSH.sftpCloseHandle $ \sftph ->
+         C.mapM (liftIO . SSH.sftpWriteFileFromBS sftph)
+        ])
+    |]
+  --}
+
 data HaskellCodeBuilder = HaskellCodeBuilder {
     hcbCombinator :: TR.Tree T.Text
   , hcbFns :: M.HashMap T.Text T.Text

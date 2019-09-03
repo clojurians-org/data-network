@@ -9,6 +9,7 @@ import qualified DataNetwork.Core.Types as DN
 import Prelude
 
 import Common.Types
+import Common.TH
 import GHC.Int (Int64)
 
 import GHC.Generics (Generic)
