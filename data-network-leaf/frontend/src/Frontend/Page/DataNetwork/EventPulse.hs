@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
-
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 
@@ -16,7 +16,7 @@ import Frontend.Widget
 import Frontend.Class
 import Prelude
 
-import Reflex.Dom.Core
+import Reflex.Dom.Core hiding ((=:))
 import Control.Monad (forM_, void)
 import Control.Monad.Fix (MonadFix)
 
@@ -28,7 +28,10 @@ import Data.String.Conversions (cs)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Concurrent (MVar, newMVar, putMVar, modifyMVar, modifyMVar_, readMVar, threadDelay)
 import Control.Lens hiding (lens)
-import Labels
+import qualified Labels as L
+import Labels (lens) 
+import qualified Data.Vinyl as V
+import Data.Vinyl ((:::), Rec((:&)), (=:))
 
 trEventPulse :: forall t m. (DomBuilder t m, PostBuild t m)
   => Dynamic t EventPulse -> m ()
@@ -63,6 +66,26 @@ dataNetwork_eventPulse = do
         EventPulseARES r -> Just r
         _ -> Nothing
 
+      epRunE = fforMaybe (updated msgD) $ \case
+        AsyncEventPulseActive r -> Just ( #name =: V.rvalf #name r
+                                       :& #event =: "事件脉冲激活"
+                                       :& #payload =: ""
+                                       :& #ts =: V.rvalf #ts r
+                                       :& V.RNil )
+        AsyncDataCircuitBegin r ->
+          Just ( #name =: (V.rvalf #event_pulse r <> " :> " <> V.rvalf #name r)
+              :& #event =: "数据电路开始运行"
+              :& #payload =: ""
+              :& #ts =: V.rvalf #ts r
+              :& V.RNil )
+        AsyncDataCircuitEnd r ->
+          Just ( #name =: (V.rvalf #event_pulse r <> " :> " <> V.rvalf #name r)
+              :& #event =: "数据电路完成运行"
+              :& #payload =: V.rvalf #result r
+              :& #ts =: V.rvalf #ts r
+              :& V.RNil )
+        _ -> Nothing
+
   divClass "ui segment basic" $ do
     pageHeader "事件脉冲" ["事件源触发事件脉冲", "事件脉冲激活数据电路"]
 
@@ -89,8 +112,19 @@ dataNetwork_eventPulse = do
   dblClickedD <- holdDyn Nothing (Just () <$ epE)
   dyn (maybe blank (const (selectorWidget dcivsD)) <$> dblClickedD)  
 
-  epActiveD <- holdDyn "" (epActiveE <&> cs . show)
-  activeWidget epActiveD
+  -- epActiveD <- holdDyn "" (epActiveE <&> cs . show)
+  -- activeWidget epActiveD
+
+{--
+  dataCircuitRunsD <- foldDyn ($) [] $ mergeWith (.)
+    [ dataCircuitRunsE <&> \xs' xs -> xs' <>  xs ]
+  divClass "ui segment basic" $ do
+    elClass "table" "ui selectable table" $ do
+    el "thead" $ el "tr" $ trHeadList ["偏移量", "扫描数据", "扫描时点"]
+    simpleList scannerItemsD $ \scannerItem ->
+      el "tr" (trSQLScannerItem scannerItem)
+--}
+  
   return ()
   where
     activeWidget epActiveD = do

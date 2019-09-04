@@ -75,17 +75,24 @@ import Network.SSH.Client.LibSSH2.Foreign
 import qualified UnliftIO as U
 import qualified Control.Monad.Trans.Resource as R
 
-import qualified Data.Vinyl as V
 import qualified Data.HashMap.Lazy as M
 import qualified Data.HashMap.Strict as MS
 import Data.Aeson.QQ (aesonQQ)
 import qualified Control.Concurrent.Async.Lifted as L
 import Control.Monad.Trans.Control (MonadBaseControl)
 
+import qualified Data.Vinyl as V
+import Data.Vinyl ((:::), (=:), Rec((:&)))
+
+import Data.Time.Clock.POSIX (getPOSIXTime)
+
+import Debug.Trace (trace, traceShow)
+
 serveWebSocket :: MonadSnap m => MVar AppST ->  m ()
 serveWebSocket appST = runWebSocketsSnap (wsConduitApp appST)
 
 subJSON :: J.Value -> J.Value -> Bool
+subJSON (J.Object m1) _ | null m1 = False
 subJSON (J.Object m1) (J.Object m2) = do
   and . flip fmap (MS.toList m1) $ \(k1, v1) -> do
     case MS.lookup k1 m2 of
@@ -95,33 +102,60 @@ subJSON (J.String s) (J.Number x) = s == (cs $ show x)
 subJSON v1 v2 = (v1 == v2)
 
 subJSONs :: J.Value -> [J.Value] -> Bool
+subJSONs x [] = False
 subJSONs x xs = all (subJSON x) xs
+
+sinkEvent :: (MonadIO m, J.ToJSON a) => STM.TBMChan B.ByteString -> a -> m ()
+sinkEvent brokerChan = U.atomically . STM.writeTBMChan brokerChan . J.encode
 
 runDataCircuit :: (MonadIO m)
   => STM.TBMChan B.ByteString -> MVar AppST -> (T.Text, DataCircuitValue) -> m ()
 runDataCircuit brokerChan appStmv (eventPulseName, dciv) = do
+  ts <- liftIO $ getPOSIXTime
+
+  sinkEvent brokerChan . AsyncDataCircuitBegin $
+       #event_pulse =: eventPulseName
+    :& #name =: dcivName dciv
+    :& #ts =: ts
+    :& V.RNil
+  
   faas <- U.readMVar appStmv
+  
   let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas dciv
-  liftIO $ T.printT haskellCode
+  
+  -- liftIO $ T.printT haskellCode
   liftIO $ I.runInterpreter . dynHaskell $ haskellCode
+
+  sinkEvent brokerChan . AsyncDataCircuitEnd $
+       #name =: dcivName dciv
+    :& #ts =: ts
+    :& #result =: "TO BE FILL"
+    :& V.RNil
+
   return ()
 
+wsRepl2 :: IO ()
+wsRepl2 = trace "why" $ do
+  print (subJSONs (J.toJSON . dcivGuard $ head exampleDataCircuitValues) []) 
+  
 activeEP :: (R.MonadUnliftIO m, MonadBaseControl IO m)
   => STM.TBMChan B.ByteString -> MVar AppST -> T.Text -> [J.Value] -> m ()
 activeEP brokerChan appStmv name payload = do
   faas <- U.readMVar appStmv
   let getter = L.lens #dataNetwork . L.lens #eventPulses . at name
       eventPulseMaybe = view getter faas
+  liftIO $ putStrLn $ "eventName:" <>  (cs name)      
   when (isJust eventPulseMaybe) $ do
-    eventPulse <- fromJust undefined eventPulseMaybe
+    let eventPulse = fromJust eventPulseMaybe
 
+    ts <- liftIO $ getPOSIXTime
+    sinkEvent brokerChan . AsyncEventPulseActive $
+      #name =: name :& #ts =: ts :& V.RNil
+    
     C.runConduit $ C.yieldMany (epDataCircuitValues eventPulse)
                 .| C.concatMap (guardPayload payload)
                 .| C.mapM (L.async . runDataCircuit brokerChan appStmv . (,) name)
                 .| C.sinkNull
---                .| CC.sinkTBMChan brokerChan
---    let haskellCode = toHaskellCode $ toHaskellCodeBuilder faas eventPulse
---    ExceptT $ mapLeft show <$> (liftIO . I.runInterpreter . dynHaskell) haskellCode
   where
     guardPayload :: [J.Value] -> DataCircuitValue -> Maybe DataCircuitValue
     guardPayload payload dciv = do
@@ -150,7 +184,7 @@ wsConduitApp appST pending= do
 
   withSocketsDo $ WS.runClient "127.0.0.1" 1111 "/ws/" (\rpcConn -> R.runResourceT $ do
     (outReg, outChan) <- mkChan 1000
-    liftIO $ putStrLn "node-ws connected  ..."    
+    liftIO $ putStrLn "node-ws connected  ..." 
     let uiSource = forever $ liftIO (WS.receiveData uiConn) >>= C.yield
         chanSink = CC.sinkTBMChan outChan
         rpcSink = C.awaitForever $ liftIO . WS.sendTextData rpcConn
@@ -159,9 +193,9 @@ wsConduitApp appST pending= do
         rpcSource = forever $ liftIO (WS.receiveData rpcConn) >>= C.yield
         uiSink = C.awaitForever $ liftIO . WS.sendTextData uiConn
 
-    joinSource <- chanSource
+    joinSource <- (chanSource .|  C.iterM (liftIO . putStrLn . ("leaf-receive:" <>) . cs))
               >=< ( rpcSource
-                 .| C.iterM (liftIO . putStrLn . ("serveWS-receive:" <>) . cs)
+                 .| C.iterM (liftIO . putStrLn . ("rpc-receive:" <>) . cs)
                  .| C.concatMap J.decode
                  .| C.iterM (rpcHandle outChan appST)
                  .| C.map (J.encode . NodeRPCRes)

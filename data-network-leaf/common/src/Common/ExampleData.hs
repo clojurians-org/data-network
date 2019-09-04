@@ -136,7 +136,7 @@ exampleEventPulses = do
     ]
 exampleDataCircuitValues :: [DataCircuitValue]
 exampleDataCircuitValues = do
-  [ def { dcivGuard = M.singleton "job_name" (J.String "PR_TM_NCMS_LOAN_CONT_INFO")
+  [ def { dcivGuard = M.singleton "JOB_NAME" (J.String "PR_TM_NCMS_LOAN_CONT_INFO")
         , dcivName = "DCV_HRFilePush"
         , dcivDesc = "华瑞银行数据下传平台"
         , dcivLinkedDataCircuit = (3, "文件下传平台")

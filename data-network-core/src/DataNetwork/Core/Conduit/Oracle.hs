@@ -175,7 +175,7 @@ aboveOracleOffset offsetMv credential database sql = do
      $ (lift (chan offset) >>= sourceTBMChan) .| C.concatMap id
     .| C.getZipConduit ((,) <$> C.ZipConduit C.sinkList
                             <*> C.ZipConduit ( C.concatMap (^? J.key "OFFSET")
-                                            .| C.foldl maxOffset J.Null))
+                                            .| C.foldl maxOffset offset))
 
   --undefined             
   where
