@@ -1,13 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
-
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 
 module Frontend.Page.DataNetwork.EventPulse
   (dataNetwork_eventPulse) where
 
+import Common.Api
 import Common.WebSocketMessage
 import Common.Types
 import Common.ExampleData
@@ -16,7 +17,7 @@ import Frontend.Widget
 import Frontend.Class
 import Prelude
 
-import Reflex.Dom.Core
+import Reflex.Dom.Core hiding ((=:))
 import Control.Monad (forM_, void)
 import Control.Monad.Fix (MonadFix)
 
@@ -28,7 +29,13 @@ import Data.String.Conversions (cs)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Concurrent (MVar, newMVar, putMVar, modifyMVar, modifyMVar_, readMVar, threadDelay)
 import Control.Lens hiding (lens)
-import Labels
+import qualified Labels as L
+import Labels (lens) 
+import qualified Data.Vinyl as V
+import Data.Vinyl ((:::), Rec((:&)), (=:))
+import qualified Data.Aeson as J
+
+import Control.Arrow ((>>>))
 
 trEventPulse :: forall t m. (DomBuilder t m, PostBuild t m)
   => Dynamic t EventPulse -> m ()
@@ -49,7 +56,6 @@ trDataCircuitValue dcivD = do
   tdDynInput (dcivD <&> dcivDesc)
   return ()
 
-
 dataNetwork_eventPulse
   :: forall t m .
      ( DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m
@@ -61,6 +67,26 @@ dataNetwork_eventPulse = do
   let epsD = stD <&> (^.. lens #dataNetwork . lens #eventPulses . each)
       epActiveE = fforMaybe (updated msgD) $ \case
         EventPulseARES r -> Just r
+        _ -> Nothing
+
+      epRunE = fforMaybe (updated msgD) $ \case
+        AsyncEventPulseActive r -> Just ( #name =: V.rvalf #name r
+                                       :& #event =: "事件脉冲激活"
+                                       :& #payload =: ""
+                                       :& #ts =: V.rvalf #ts r
+                                       :& V.RNil )
+        AsyncDataCircuitBegin r ->
+          Just ( #name =: (V.rvalf #event_pulse r <> " :> " <> V.rvalf #name r)
+              :& #event =: "数据电路开始运行"
+              :& #payload =: ""
+              :& #ts =: V.rvalf #ts r
+              :& V.RNil )
+        AsyncDataCircuitEnd r ->
+          Just ( #name =: (V.rvalf #event_pulse r <> " :> " <> V.rvalf #name r)
+              :& #event =: "数据电路完成运行"
+              :& #payload =: V.rvalf #result r
+              :& #ts =: V.rvalf #ts r
+              :& V.RNil )
         _ -> Nothing
 
   divClass "ui segment basic" $ do
@@ -89,8 +115,20 @@ dataNetwork_eventPulse = do
   dblClickedD <- holdDyn Nothing (Just () <$ epE)
   dyn (maybe blank (const (selectorWidget dcivsD)) <$> dblClickedD)  
 
-  epActiveD <- holdDyn "" (epActiveE <&> cs . show)
-  activeWidget epActiveD
+  -- epActiveD <- holdDyn "" (epActiveE <&> cs . show)
+  -- activeWidget epActiveD
+
+  epRunsD <- foldDyn ($) [] $ mergeWith (.)
+    [ epRunE <&> \x xs -> x :  xs ]
+  divClass "ui segment basic" $ do
+    elClass "table" "ui selectable table" $ do
+    el "thead" $ el "tr" $ trHeadList ["时点", "类型", "名称", "数据"]
+    simpleList epRunsD $ \epRun -> el "tr" $ do
+      el "td" $ dynText (epRun <&> iso8601TimeFormat . V.rvalf #ts)
+      el "td" $ dynText (epRun <&> V.rvalf #event)            
+      el "td" $ dynText (epRun <&> V.rvalf #name)
+      el "td" $ dynText (epRun <&> V.rvalf #payload)       
+  
   return ()
   where
     activeWidget epActiveD = do
@@ -100,8 +138,10 @@ dataNetwork_eventPulse = do
       
     selectorWidget dcivsD = do
       divClass "ui segment basic" $ divClass "ui grid" $ do
-        divClass "eight wide column" $ navWidget dcivsD
-        divClass "eight wide column" $ contentWidget --tableRE
+        dcivE <- divClass "eight wide column" $ navWidget dcivsD
+        dcivD <- holdDyn def dcivE   
+        divClass "eight wide column" $ contentWidget dcivD
+
       return ()
     navWidget dcivsD = do
       elClass "table" "ui selectable table collapsing" $ do
@@ -110,19 +150,19 @@ dataNetwork_eventPulse = do
         e1 <- switchDyn . fmap leftmost <$> simpleList dcivsD
                 (\x -> (trE $ selectE >> trDataCircuitValue x) <&> tagPromptlyDyn x)
         return $ leftmost [e0, e1]
-    contentWidget = do
+    contentWidget dcivD = do
       divClass "ui top attached segment" $ do
-        elClass "h4" "ui header" $ text "代码浏览器"
+        elClass "h4" "ui header" $ text "数据电路值详情"
       divClass "ui attached segment" $ divClass "ui form" $ do
+        divClass "field" $ do
+          el "label" $ text "筛选器"
+          dynInputB (dcivD <&> (dcivGuard >>> J.encode >>> cs))
         divClass "three fields" $ do
-          divClass "field" $ do
-            el "label" $ text "状态容器"
-            inputElement $ def
-          divClass "field" $ do
-            el "label" $ text "数据源"
-            inputElement $ def
-          divClass "field" $ do
-            el "label" $ text "数据服务"
-            inputElement $ def
+          divClass "field" $ el "label" (text "状态容器")
+            >> dynInputB (dcivD <&> (dcivLinkedDataSandbox >>> ldsaStateContainers >>> map snd >>> show >>> cs))
+          divClass "field" $ el "label" (text "数据源")
+            >> dynInputB (dcivD <&> (dcivLinkedDataSandbox >>> ldsaDataSources >>> map snd >>> show >>> cs))
+          divClass "field" $ el "label" (text "数据服务")
+            >> dynInputB (dcivD <&> (dcivLinkedDataSandbox >>> ldsaDataServices >>> map snd >>> show >>> cs))
           
       

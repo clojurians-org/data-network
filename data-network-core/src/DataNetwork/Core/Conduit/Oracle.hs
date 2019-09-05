@@ -131,7 +131,7 @@ oracleJSONChan credential database sql = oracleRawChan credential database sql d
   where decode v = do
           jv <- liftIO $ Oracle.fromDataFields' v
           case J.fromJSON jv of
-            J.Error s -> return Nothing
+            J.Error s -> liftIO $ print s >> return Nothing
             J.Success v -> return $ Just v
           
 oracleShowTables ::  forall m. (MonadIO m, U.MonadUnliftIO m)
@@ -146,13 +146,13 @@ oracleShowTables credential database =
               |]
 
 oracleDescribeTable :: forall m. (MonadIO m, U.MonadUnliftIO m)
-  => Credential -> T.Text -> (T.Text, T.Text) -> m [("name" := T.Text, "type" := T.Text, "desc" := T.Text)]
+  => Credential -> T.Text -> (T.Text, T.Text) -> m [("name" := T.Text, "type" := T.Text, "desc" := Maybe T.Text)]
 oracleDescribeTable credential database (schema, table) = do
   C.runConduitRes $ (lift chan >>= sourceTBMChan) .| C.concatMap id .| C.sinkList
   where
     chan = oracleJSONChan credential database sql
     sql =    " select t1.column_name as \"name\", t1.data_type as \"type\", t2.comments as \"desc\" \n"
-          <> " from all_tab_columns t1 inner join all_col_comments t2 \n"
+          <> " from all_tab_columns t1 left join all_col_comments t2 \n"
           <> "    on t1.owner = t2.owner and t1.table_name = t2.table_name and t1.column_name = t2.column_name\n"
           <> " where t1.owner = '" <> schema <> "' AND t1.table_name = '" <> table <> "'\n"
 
@@ -175,7 +175,7 @@ aboveOracleOffset offsetMv credential database sql = do
      $ (lift (chan offset) >>= sourceTBMChan) .| C.concatMap id
     .| C.getZipConduit ((,) <$> C.ZipConduit C.sinkList
                             <*> C.ZipConduit ( C.concatMap (^? J.key "OFFSET")
-                                            .| C.foldl maxOffset J.Null))
+                                            .| C.foldl maxOffset offset))
 
   --undefined             
   where
@@ -196,7 +196,8 @@ oracleRepl :: IO ()
 oracleRepl = do
 --  a <- oracleShowTables (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB"
 --  print a
-  b <- oracleDescribeTable (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB" ("SCHNEW", "SCH_CURR_JOB")
+--  b <- oracleDescribeTable (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW") "EDWDB" ("SCHNEW", "SCH_CURR_JOB")
+  b <- oracleDescribeTable (Credential "10.132.37.241" 1521 "KB" "KB123456") "EDMP" ("EDMP", "BUMBLEBEE_ACQUISITION_RESULT")
   print b
   {--
   (rs, mv') <- aboveOracleOffset (Just J.Null) (Credential "10.129.35.227" 1521 "SCHNEW" "SCHNEW")  "EDWDB" $ sql

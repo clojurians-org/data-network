@@ -43,7 +43,6 @@ main = R.runResourceT $ do
   liftIO $ do
     SS.serveSnaplet (S.defaultConfig & S.setPort 1111) $
       app brokerChan appStmv
-  R.release reg
   liftIO $ putStrLn "finished!"
   
 app :: CC.TBMChan B.ByteString -> L.MVar Lib.WebSocketState -> SS.SnapletInit App App

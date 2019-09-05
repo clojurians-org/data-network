@@ -337,7 +337,7 @@ instance ToHaskellCodeBuilder DSEFSSFtp where
   toHaskellCodeBuilder _ dsefsSFtp = def
     { hcbFns = M.fromList [(dsefsSFtpName dsefsSFtp, (cs . unlines)
       [ "  let (hostname, port, username, password) = (\"10.132.37.201\", 22, \"op\", \"op\") "
-      , "      filepath = \"larluo111.txt\" "
+      , "      filepath = \"larluo.txt\" "
       , "      flags = [SSH.FXF_WRITE, SSH.FXF_CREAT, SSH.FXF_TRUNC, SSH.FXF_EXCL] "
       , "  bracketP (SSH.sessionInit hostname port) SSH.sessionClose $ \\s -> do "
       , "    liftIO $ SSH.usernamePasswordAuth s username password "

@@ -23,6 +23,7 @@ import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Reflex.Dom.Core
 
+import Data.Maybe (fromMaybe)
 import Data.String.Conversions (cs)
 import Data.Functor ((<&>))
 import Control.Lens hiding (lens)
@@ -64,7 +65,7 @@ dataSource_sqlCursor = do
     
   (submitD, submitE, sqlCursorD) <- divClass "ui segment basic" $ do
     sqlCursorE <- elClass "table" "ui selectable table" $ do
-      theadList ["名称", "描述", "类型", "主机", "数据库"]
+      theadList ["名称", "描述", "类型", "数据库", "目标表"]
       e0 <- (trE $ createIcon >> trSQLCursor (constDyn (def :: DSOSQLCursor))) <&> tagPromptlyDyn (return def)
       e1 <- switchDyn . fmap leftmost <$> simpleList sqlCursorsD
               (\x -> (trE $ selectE >> trSQLCursor x) <&> tagPromptlyDyn x)
@@ -109,7 +110,7 @@ dataSource_sqlCursor = do
               selectE
               el "td" $ dynText (v <&> (^. lens #name))
               el "td" $ dynText (v <&> (^. lens #type))
-              el "td" $ dynText (v <&> (^. lens #desc))              
+              el "td" $ dynText (v <&> fromMaybe "" . (^. lens #desc)) 
     selectorWidget submitD sqlCursorD databaseRE tableRE = 
       divClass "ui segment basic" $ divClass "ui grid" $ do
         divClass "six wide column" $ navWidget submitD sqlCursorD databaseRE

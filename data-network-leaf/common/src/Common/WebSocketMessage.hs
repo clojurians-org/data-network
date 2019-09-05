@@ -28,6 +28,9 @@ import Data.Time.Clock.POSIX (POSIXTime)
 
 import Labels
 
+import qualified Data.Vinyl as V
+import Data.Vinyl ((:::), (=:), Rec((:&)))
+
 data TableEntry = TableEntry {
     sqlEntrySchema :: T.Text  
   , sqlEntryName :: T.Text
@@ -103,14 +106,18 @@ data WSResponseMessage = NeverRES
                                                                 , "table" := T.Text)])
                      | DSOSQLCursorTableRRES (Either String [( "name" := T.Text
                                                              , "type" := T.Text
-                                                             , "desc" := T.Text)])
+                                                             , "desc" := Maybe T.Text)])
 
                     -- SFTP
                      | DSEFSSFtpDirectoryRRES (Either String [SFtpEntry])
                      
                     -- Node
                      | NodeRPCRes DN.RPCResponse
-                     -- Unkown
+                    -- AsynResponse
+                     | AsyncEventPulseActive (V.FieldRec '["name" ::: T.Text, "ts":::POSIXTime])
+                     | AsyncDataCircuitBegin (V.FieldRec '["event_pulse" ::: T.Text, "name" ::: T.Text, "ts":::POSIXTime])
+                     | AsyncDataCircuitEnd (V.FieldRec '["event_pulse" ::: T.Text, "name" ::: T.Text, "ts":::POSIXTime, "result":::T.Text])
+                    -- Unkown
                      | WSResponseUnknown WSRequestMessage
   deriving (Generic, Show)
 instance J.ToJSON WSResponseMessage
