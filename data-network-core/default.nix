@@ -67,7 +67,21 @@ let
           doCheck = false ;
           jailbreak = true ;
       }) ;
-
+      hssqlppp = overrideCabal
+        (self.callCabal2nix "hssqlpp"
+          (fetchzip {
+            url = mirror://hackage/hssqlppp-0.6.2/hssqlppp-0.6.2.tar.gz ;
+            sha256 = "0b1p71mi204hp42fy686nm3l98sbp4w2g7y1fh07v9y96y2770lh" ; 
+            })
+          #(pkgs.fetchFromGitHub {
+          #  owner = "JakeWheat" ;
+          #  repo = "hssqlppp" ;
+          #  rev = "7d2aaa358e54d09d483c4d983b038033af8dd279" ;
+          #  sha256 = "0ihr0av55kfg36igb1dn5q132q4gnyaf041xqi4rw7n67525qdap" ; })
+          {} )
+        (drv: {
+          doCheck = false ;
+          jailbreak = true ; }) ;
     } ;
   } ;
 in
