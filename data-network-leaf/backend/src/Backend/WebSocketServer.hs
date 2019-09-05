@@ -108,6 +108,13 @@ subJSONs x xs = all (subJSON x) xs
 sinkEvent :: (MonadIO m, J.ToJSON a) => STM.TBMChan B.ByteString -> a -> m ()
 sinkEvent brokerChan = U.atomically . STM.writeTBMChan brokerChan . J.encode
 
+wsRepl2 :: IO ()
+wsRepl2 = do
+  let code = toHaskellCode $ toHaskellCodeBuilder exampleFaasCenter $ head exampleDataCircuitValues
+  putStrLn (cs code)
+  (liftIO $ I.runInterpreter $ dynHaskell code) >>= print
+  
+
 runDataCircuit :: (MonadIO m)
   => STM.TBMChan B.ByteString -> MVar AppST -> (T.Text, DataCircuitValue) -> m ()
 runDataCircuit brokerChan appStmv (eventPulseName, dciv) = do
@@ -127,16 +134,13 @@ runDataCircuit brokerChan appStmv (eventPulseName, dciv) = do
   liftIO $ I.runInterpreter . dynHaskell $ haskellCode
 
   sinkEvent brokerChan . AsyncDataCircuitEnd $
-       #name =: dcivName dciv
+       #event_pulse =: eventPulseName
+    :& #name =: dcivName dciv
     :& #ts =: ts
-    :& #result =: "TO BE FILL"
+    :& #result =: "SUCCESS"
     :& V.RNil
 
   return ()
-
-wsRepl2 :: IO ()
-wsRepl2 = trace "why" $ do
-  print (subJSONs (J.toJSON . dcivGuard $ head exampleDataCircuitValues) []) 
   
 activeEP :: (R.MonadUnliftIO m, MonadBaseControl IO m)
   => STM.TBMChan B.ByteString -> MVar AppST -> T.Text -> [J.Value] -> m ()

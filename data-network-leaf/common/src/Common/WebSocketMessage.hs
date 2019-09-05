@@ -105,7 +105,7 @@ data WSResponseMessage = NeverRES
                                                                 , "table" := T.Text)])
                      | DSOSQLCursorTableRRES (Either String [( "name" := T.Text
                                                              , "type" := T.Text
-                                                             , "desc" := T.Text)])
+                                                             , "desc" := Maybe T.Text)])
 
                     -- SFTP
                      | DSEFSSFtpDirectoryRRES (Either String [SFtpEntry])
